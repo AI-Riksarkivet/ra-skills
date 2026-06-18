@@ -5,15 +5,12 @@ on:
     paths:
       - "scripts/AGENTS_TEMPLATE.md"
       - "scripts/generate_agents.py"
-      - "scripts/generate_cursor_plugin.py"
       - "scripts/publish.sh"
       - "**/SKILL.md"
       - "agents/AGENTS.md"
       - "README.md"
       - ".claude-plugin/marketplace.json"
       - ".claude-plugin/plugin.json"
-      - "gemini-extension.json"
-      - ".cursor-plugin/plugin.json"
   push:
     branches: [main]
 

@@ -4,11 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-# ra-skills is skills-only: no .mcp.json is generated (no owned MCP server).
+# ra-skills targets the Claude ecosystem (Claude Code + its VS Code / Zed surfaces)
+# plus the AGENTS.md standard those editors read. No Gemini / Codex / Cursor artifacts.
 GENERATED_FILES=(
   "agents/AGENTS.md"
   "README.md"
-  ".cursor-plugin/plugin.json"
 )
 
 file_sig() {
@@ -22,7 +22,6 @@ file_sig() {
 
 run_generate() {
   uv run scripts/generate_agents.py
-  uv run scripts/generate_cursor_plugin.py
 }
 
 run_check() {
@@ -53,9 +52,6 @@ run_check() {
     exit 1
   fi
 
-  # Explicit check for cursor-only artifacts (.cursor-plugin/plugin.json + .mcp.json absence)
-  uv run scripts/generate_cursor_plugin.py --check
-
   echo "All generated artifacts are up to date."
 }
 
@@ -76,7 +72,6 @@ Usage:
 This script regenerates:
   - agents/AGENTS.md
   - README.md (skills table section)
-  - .cursor-plugin/plugin.json
 EOF
     ;;
   *)

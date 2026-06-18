@@ -20,8 +20,8 @@ frontmatter and progressive-disclosure references under `references/`. Claude (o
 Cursor) loads the `SKILL.md` when the description matches your intent.
 
 > [!TIP]
-> If your agent doesn't support skills, use [`agents/AGENTS.md`](agents/AGENTS.md) directly as a
-> fallback bundle.
+> VS Code and Zed's native agents read the `AGENTS.md` standard — use the generated
+> [`agents/AGENTS.md`](agents/AGENTS.md) bundle there.
 
 ## Installation
 
@@ -39,25 +39,22 @@ For example:
 /plugin install rask-architecture@ra-skills
 ```
 
-### Codex
+### VS Code
 
-Copy or symlink any skill from `skills/` into a standard `.agents/skills` location
-(`$REPO_ROOT/.agents/skills` or `$HOME/.agents/skills`); Codex discovers them via the Agent
-Skills standard. Or use the generated [`agents/AGENTS.md`](agents/AGENTS.md) as an `AGENTS.md`
-fallback.
+The Claude Code VS Code extension reads the **same** marketplace — the
+`/plugin marketplace add` + `/plugin install` commands above apply unchanged. For VS Code's
+native agents (which read the `AGENTS.md` standard), drop the generated
+[`agents/AGENTS.md`](agents/AGENTS.md) bundle into your project root.
 
-### Gemini CLI
+### Zed
 
-This repo ships `gemini-extension.json`:
+Run Claude Code in Zed via its external-agent (ACP) support — same marketplace commands as
+above. For Zed's native agent, point it at the generated
+[`agents/AGENTS.md`](agents/AGENTS.md) bundle.
 
-```bash
-gemini extensions install https://github.com/AI-Riksarkivet/ra-skills.git --consent
-```
-
-### Cursor
-
-This repo ships `.cursor-plugin/`; install via the Cursor plugin flow. Regenerate manifests with
-`./scripts/publish.sh`.
+> Scope: ra-skills targets the **Claude ecosystem** (Claude Code in the terminal, VS Code, and
+> Zed) plus the `AGENTS.md` standard those editors consume. It deliberately ships **no** Gemini,
+> Codex, or Cursor manifests.
 
 ## Skills
 
@@ -132,7 +129,7 @@ Hand-edit **only** `SKILL.md` files, `references/`, and `.claude-plugin/{marketp
 Everything else is generated.
 
 ```bash
-./scripts/publish.sh          # regenerate agents/AGENTS.md, the README table, .cursor-plugin/plugin.json
+./scripts/publish.sh          # regenerate agents/AGENTS.md + the README skills table
 ./scripts/publish.sh --check  # CI drift-check (also run by .github/workflows/validate-artifacts.yml)
 ```
 
