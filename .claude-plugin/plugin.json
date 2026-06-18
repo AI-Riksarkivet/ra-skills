@@ -1,0 +1,22 @@
+{
+  "name": "ra-skills",
+  "description": "Agent Skills for the Riksarkivet (Swedish National Archives) rask HTR platform — shared language/toolchain conventions plus rask-specific architecture, services-fleet, HTR pipeline, and orchestrator skills.",
+  "version": "1.0.0",
+  "author": {
+    "name": "AI Riksarkivet"
+  },
+  "homepage": "https://github.com/AI-Riksarkivet/ra-skills",
+  "repository": "https://github.com/AI-Riksarkivet/ra-skills",
+  "license": "Apache-2.0",
+  "keywords": [
+    "riksarkivet",
+    "rask",
+    "htr",
+    "python",
+    "typescript",
+    "fastapi",
+    "ray",
+    "dagger",
+    "claude-code"
+  ]
+}

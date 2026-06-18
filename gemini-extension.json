@@ -1,0 +1,6 @@
+{
+  "name": "ra-skills",
+  "description": "Agent Skills for the Riksarkivet rask HTR platform.",
+  "version": "1.0.0",
+  "contextFileName": "agents/AGENTS.md"
+}

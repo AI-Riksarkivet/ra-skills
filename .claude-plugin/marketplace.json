@@ -1,0 +1,26 @@
+{
+  "name": "ra-skills",
+  "owner": {
+    "name": "AI Riksarkivet"
+  },
+  "metadata": {
+    "description": "Agent Skills for the Riksarkivet rask HTR platform — language/toolchain conventions (Python, TypeScript, FastAPI, Dagger, Docker, OTel, Zensical, pytest) plus project-specific architecture, services-fleet, HTR pipeline, and orchestrator skills. Granular: install one skill at a time with /plugin install <name>@AI-Riksarkivet/ra-skills.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    { "name": "writing-python",        "source": "./skills/writing-python",        "skills": "./", "description": "Idiomatic Python 3.14+ — type safety, Pydantic-first patterns, error handling, config, CLI." },
+    { "name": "writing-typescript",    "source": "./skills/writing-typescript",    "skills": "./", "description": "Idiomatic TypeScript for the SvelteKit frontend + component lib — strict typing, Result types, Bun/Vite/Vitest." },
+    { "name": "fastapi",               "source": "./skills/fastapi",               "skills": "./", "description": "FastAPI + Pydantic production patterns: async, dependency injection, repositories, services, tests." },
+    { "name": "testing-python",        "source": "./skills/testing-python",        "skills": "./", "description": "pytest for the rask suite — importlib import-mode, explicit testpaths, the slow marker, async + respx HTTP mocking." },
+    { "name": "python-infrastructure", "source": "./skills/python-infrastructure", "skills": "./", "description": "System-reliability Python: NATS JetStream jobs, Dapr workflows, tenacity retries, Redis cache, OTLP." },
+    { "name": "otel",                  "source": "./skills/otel",                  "skills": "./", "description": "OpenTelemetry for Python services — SDK setup, spans/metrics/logs, semantic conventions, the Collector pipeline." },
+    { "name": "dagger",                "source": "./skills/dagger",                "skills": "./", "description": "Dagger modules/functions in Go for container builds and CI/CD as typed, composable pipelines." },
+    { "name": "dockerfile",            "source": "./skills/dockerfile",            "skills": "./", "description": "Production dockerfiles — multi-stage discipline, BuildKit cache mounts, hadolint, the .docker build-context contract." },
+    { "name": "zensical-setup",        "source": "./skills/zensical-setup",        "skills": "./", "description": "Set up and configure Zensical (zensical.toml): palette, nav, theme features, mkdocstrings, GitHub Pages deploy." },
+    { "name": "zensical-authoring",    "source": "./skills/zensical-authoring",    "skills": "./", "description": "Author Zensical docs: admonitions, superfences/mermaid, tabbed blocks, tasklists, grids, icons, front matter." },
+    { "name": "rask-architecture",     "source": "./skills/rask-architecture",     "skills": "./", "description": "rask Polylith bricks + the entrypoint/brick composition contract, two-place workspace edits, the make_service_app seam." },
+    { "name": "rask-services-fleet",   "source": "./skills/rask-services-fleet",   "skills": "./", "description": "Gateway + per-domain services topology: port map, longest-prefix routing, the 502 contract, batches-table ownership." },
+    { "name": "rask-htr-pipeline",     "source": "./skills/rask-htr-pipeline",     "skills": "./", "description": "The image→ALTO Ray Data/Serve pipeline: GPU-fraction packing math, the OOM-cascade lessons, the fan-out workaround." },
+    { "name": "rask-orchestrator",     "source": "./skills/rask-orchestrator",     "skills": "./", "description": "The reconcile→derive→submit loop: single-writer/autostart invariants, end-to-end idempotency, the NATS roadmap." }
+  ]
+}
