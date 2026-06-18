@@ -16,8 +16,8 @@ own granular plugin.
 ## How skills work
 
 A skill is a folder under `skills/<name>/` containing a `SKILL.md` with `name` + `description`
-frontmatter and progressive-disclosure references under `references/`. Claude (or Codex / Gemini /
-Cursor) loads the `SKILL.md` when the description matches your intent.
+frontmatter and progressive-disclosure references under `references/`. Claude Code (in the
+terminal, VS Code, or Zed) loads the `SKILL.md` when the description matches your intent.
 
 > [!TIP]
 > VS Code and Zed's native agents read the `AGENTS.md` standard — use the generated
@@ -61,8 +61,8 @@ above. For Zed's native agent, point it at the generated
 Two tiers, distinguished by the `rask-` name prefix:
 
 - **CORE** (repo-agnostic) — `writing-python`, `writing-typescript`, `fastapi`, `testing-python`,
-  `python-infrastructure`, `otel`, `dagger`, `dockerfile`, `zensical-setup`, `zensical-authoring`.
-  Reusable in any RA repo (and beyond).
+  `python-infrastructure`, `otel`, `dagger`, `dockerfile`, `turborepo`, `zensical-setup`,
+  `zensical-authoring`. Reusable in any RA repo (and beyond).
 - **PROJECT** (`rask-*`, Riksarkivet-coupled) — `rask-architecture`, `rask-services-fleet`,
   `rask-htr-pipeline`, `rask-orchestrator`. Encode load-bearing rask knowledge that no single
   source file states.
@@ -81,6 +81,7 @@ Two tiers, distinguished by the `rask-` name prefix:
 | `rask-orchestrator` | The reconcile→derive→submit loop: single-writer/autostart invariants, end-to-end idempotency, the NATS roadmap. | [SKILL.md](skills/rask-orchestrator/SKILL.md) |
 | `rask-services-fleet` | Gateway + per-domain services topology: port map, longest-prefix routing, the 502 contract, batches-table ownership. | [SKILL.md](skills/rask-services-fleet/SKILL.md) |
 | `testing-python` | pytest for the rask suite — importlib import-mode, explicit testpaths, the slow marker, async + respx HTTP mocking. | [SKILL.md](skills/testing-python/SKILL.md) |
+| `turborepo` | Turborepo monorepo build system — turbo.json task pipelines, caching/remote cache, --filter/--affected, CI optimization, boundaries. | [SKILL.md](skills/turborepo/SKILL.md) |
 | `writing-python` | Idiomatic Python 3.14+ — type safety, Pydantic-first patterns, error handling, config, CLI. | [SKILL.md](skills/writing-python/SKILL.md) |
 | `writing-typescript` | Idiomatic TypeScript for the SvelteKit frontend + component lib — strict typing, Result types, Bun/Vite/Vitest. | [SKILL.md](skills/writing-typescript/SKILL.md) |
 | `zensical-authoring` | Author Zensical docs: admonitions, superfences/mermaid, tabbed blocks, tasklists, grids, icons, front matter. | [SKILL.md](skills/zensical-authoring/SKILL.md) |
@@ -95,7 +96,7 @@ Two tiers, distinguished by the `rask-` name prefix:
 
 ### 1. RA-owned skills — **vendored here** (this repo)
 
-The 14 skills above. Repos consume them as a marketplace (`/plugin install <name>@ra-skills`),
+The 15 skills above. Repos consume them as a marketplace (`/plugin install <name>@ra-skills`),
 **not** by copying into `.claude/skills/` — that copy-vendoring is exactly what caused the drift
 this repo fixes.
 

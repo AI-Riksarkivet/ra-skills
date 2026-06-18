@@ -32,17 +32,40 @@ def load_template() -> str:
     return TEMPLATE_PATH.read_text(encoding="utf-8")
 
 
+_TOP_KEY_RE = re.compile(r"^([A-Za-z0-9_-]+):(.*)$")
+_BLOCK_INDICATORS = {"|", ">", "|-", ">-", "|+", ">+"}
+
+
 def parse_frontmatter(text: str) -> dict[str, str]:
-    """Parse a minimal YAML-ish frontmatter block without external deps."""
+    """Parse a minimal YAML frontmatter block without external deps.
+
+    Handles single-line scalars AND folded/literal block scalars
+    (``description: >`` / ``description: |``), folding their continuation
+    lines into one space-joined string. Nested/indented keys (e.g. a
+    ``metadata:`` block) are skipped. This keeps generated AGENTS.md
+    descriptions correct regardless of which YAML scalar style a SKILL.md uses.
+    """
     match = re.search(r"^---\s*\n(.*?)\n---\s*", text, re.DOTALL)
     if not match:
         return {}
+    lines = match.group(1).splitlines()
     data: dict[str, str] = {}
-    for line in match.group(1).splitlines():
-        if ":" not in line:
+    i = 0
+    while i < len(lines):
+        m = _TOP_KEY_RE.match(lines[i])
+        if not m:  # blank line or indented (nested) key — skip
+            i += 1
             continue
-        key, value = line.split(":", 1)
-        data[key.strip()] = value.strip()
+        key, rest = m.group(1), m.group(2).strip()
+        i += 1
+        if rest in _BLOCK_INDICATORS:
+            block: list[str] = []
+            while i < len(lines) and (not lines[i].strip() or lines[i][:1] in (" ", "\t")):
+                block.append(lines[i].strip())
+                i += 1
+            data[key] = " ".join(b for b in block if b)  # fold to one line
+        else:
+            data[key] = rest
     return data
 
 
