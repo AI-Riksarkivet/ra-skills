@@ -18,10 +18,6 @@
     { "name": "dockerfile",            "source": "./skills/dockerfile",            "skills": "./", "description": "Production dockerfiles — multi-stage discipline, BuildKit cache mounts, hadolint, the .docker build-context contract." },
     { "name": "turborepo",             "source": "./skills/turborepo",             "skills": "./", "description": "Turborepo monorepo build system — turbo.json task pipelines, caching/remote cache, --filter/--affected, CI optimization, boundaries." },
     { "name": "zensical-setup",        "source": "./skills/zensical-setup",        "skills": "./", "description": "Set up and configure Zensical (zensical.toml): palette, nav, theme features, mkdocstrings, GitHub Pages deploy." },
-    { "name": "zensical-authoring",    "source": "./skills/zensical-authoring",    "skills": "./", "description": "Author Zensical docs: admonitions, superfences/mermaid, tabbed blocks, tasklists, grids, icons, front matter." },
-    { "name": "rask-architecture",     "source": "./skills/rask-architecture",     "skills": "./", "description": "rask Polylith bricks + the entrypoint/brick composition contract, two-place workspace edits, the make_service_app seam." },
-    { "name": "rask-services-fleet",   "source": "./skills/rask-services-fleet",   "skills": "./", "description": "Gateway + per-domain services topology: port map, longest-prefix routing, the 502 contract, batches-table ownership." },
-    { "name": "rask-htr-pipeline",     "source": "./skills/rask-htr-pipeline",     "skills": "./", "description": "The image→ALTO Ray Data/Serve pipeline: GPU-fraction packing math, the OOM-cascade lessons, the fan-out workaround." },
-    { "name": "rask-orchestrator",     "source": "./skills/rask-orchestrator",     "skills": "./", "description": "The reconcile→derive→submit loop: single-writer/autostart invariants, end-to-end idempotency, the NATS roadmap." }
+    { "name": "zensical-authoring",    "source": "./skills/zensical-authoring",    "skills": "./", "description": "Author Zensical docs: admonitions, superfences/mermaid, tabbed blocks, tasklists, grids, icons, front matter." }
   ]
 }
