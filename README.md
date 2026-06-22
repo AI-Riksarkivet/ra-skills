@@ -117,6 +117,17 @@ this repo fixes.
 | `svelte` (Svelte 5 MCP) | `bunx -y @sveltejs/mcp` | `make claude-bootstrap` → `claude mcp add -s local svelte` | local (per-developer, project) |
 | `ra-mcp` (Riksarkivet MCP) | claude.ai-hosted | added per-developer if used | user (optional) |
 
+### 4. Optional behavior overlays — **evaluated, not RA-owned**
+
+General-purpose *behavior* skills (they change how the agent writes/talks, not RA domain
+knowledge). **Not vendored or owned here** — they live in their own maintained marketplaces; this
+table just records the team's evaluation so the decision isn't re-litigated.
+
+| Skill | Source (MIT) | Verdict |
+|---|---|---|
+| **ponytail** | [`DietrichGebert/ponytail`](https://github.com/DietrichGebert/ponytail) | **Optional — trial it per-developer.** A YAGNI / "don't over-build" overlay with a credible *agentic* benchmark (−54% LOC, −20% cost, 100% safe on a real FastAPI+React repo). Watch for friction with rask's deliberately-explicit `writing-python` / observability conventions. Try: `/plugin marketplace add DietrichGebert/ponytail` → `/plugin install ponytail@ponytail`. Do **not** make it a default. |
+| **caveman** | [`juliusbrussee/caveman`](https://github.com/juliusbrussee/caveman) | **Evaluated, not adopted.** Compresses *output prose* only; ponytail's agentic benchmark shows caveman *raised* tokens/cost/time (+7% / +3% / +2%) in real agent loops, and terse "caveman" replies hurt review/handoff clarity. Personal user-scope novelty at most. |
+
 ### Dropped during unification (do **not** re-add)
 
 `deno-skills@denoland-skills` (rask is Bun-only), the `svelte@svelte` plugin
