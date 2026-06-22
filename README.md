@@ -60,7 +60,7 @@ above. For Zed's native agent, point it at the generated
 
 ra-skills holds **only shared, reusable skills** (language + toolchain): `writing-python`,
 `writing-typescript`, `fastapi`, `testing-python`, `python-infrastructure`, `otel`, `dagger`,
-`dockerfile`, `turborepo`, `shadcn-svelte`, `zensical-setup`, `zensical-authoring`.
+`dockerfile`, `turborepo`, `shadcn-svelte`, `micro-frontends`, `zensical-setup`, `zensical-authoring`.
 
 **Project-specific skills live with their project, not here** — e.g. rask's `rask-*`
 architecture/pipeline/orchestrator skills are vendored in the rask repo's `.claude/skills/`, and
@@ -74,6 +74,7 @@ the shared marketplace.
 | `dagger` | Dagger modules/functions in Go for container builds and CI/CD as typed, composable pipelines. | [SKILL.md](skills/dagger/SKILL.md) |
 | `dockerfile` | Production dockerfiles — multi-stage discipline, BuildKit cache mounts, hadolint, the .docker build-context contract. | [SKILL.md](skills/dockerfile/SKILL.md) |
 | `fastapi` | FastAPI + Pydantic production patterns: async, dependency injection, repositories, services, tests. | [SKILL.md](skills/fastapi/SKILL.md) |
+| `micro-frontends` | Composing one UI from independently deployed frontends owned by separate teams: build-time / zones / server-side / client-side-runtime composition, Module Federation, single-spa, web components, cross-app communication, and when-to-use tradeoffs. | [SKILL.md](skills/micro-frontends/SKILL.md) |
 | `otel` | OpenTelemetry for Python services — SDK setup, spans/metrics/logs, semantic conventions, the Collector pipeline. | [SKILL.md](skills/otel/SKILL.md) |
 | `python-infrastructure` | System-reliability Python: NATS JetStream jobs, Dapr workflows, tenacity retries, Redis cache, OTLP. | [SKILL.md](skills/python-infrastructure/SKILL.md) |
 | `shadcn-svelte` | shadcn-svelte components + CLI: add/update/fix components, composition, forms, icons, styling, components.json (official skill from huntabyte/shadcn-svelte). | [SKILL.md](skills/shadcn-svelte/SKILL.md) |
@@ -93,7 +94,7 @@ the shared marketplace.
 
 ### 1. RA-owned skills — **vendored here** (this repo)
 
-The 12 skills above. Repos consume them as a marketplace (`/plugin install <name>@ra-skills`),
+The 13 skills above. Repos consume them as a marketplace (`/plugin install <name>@ra-skills`),
 **not** by copying into `.claude/skills/` — that copy-vendoring is exactly what caused the drift
 this repo fixes.
 
