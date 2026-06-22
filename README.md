@@ -60,7 +60,7 @@ above. For Zed's native agent, point it at the generated
 
 ra-skills holds **only shared, reusable skills** (language + toolchain): `writing-python`,
 `writing-typescript`, `fastapi`, `testing-python`, `python-infrastructure`, `otel`, `dagger`,
-`dockerfile`, `turborepo`, `zensical-setup`, `zensical-authoring`.
+`dockerfile`, `turborepo`, `shadcn-svelte`, `zensical-setup`, `zensical-authoring`.
 
 **Project-specific skills live with their project, not here** — e.g. rask's `rask-*`
 architecture/pipeline/orchestrator skills are vendored in the rask repo's `.claude/skills/`, and
@@ -93,7 +93,7 @@ the shared marketplace.
 
 ### 1. RA-owned skills — **vendored here** (this repo)
 
-The 11 skills above. Repos consume them as a marketplace (`/plugin install <name>@ra-skills`),
+The 12 skills above. Repos consume them as a marketplace (`/plugin install <name>@ra-skills`),
 **not** by copying into `.claude/skills/` — that copy-vendoring is exactly what caused the drift
 this repo fixes.
 
