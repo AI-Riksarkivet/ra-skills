@@ -76,6 +76,7 @@ the shared marketplace.
 | `fastapi` | FastAPI + Pydantic production patterns: async, dependency injection, repositories, services, tests. | [SKILL.md](skills/fastapi/SKILL.md) |
 | `otel` | OpenTelemetry for Python services — SDK setup, spans/metrics/logs, semantic conventions, the Collector pipeline. | [SKILL.md](skills/otel/SKILL.md) |
 | `python-infrastructure` | System-reliability Python: NATS JetStream jobs, Dapr workflows, tenacity retries, Redis cache, OTLP. | [SKILL.md](skills/python-infrastructure/SKILL.md) |
+| `shadcn-svelte` | shadcn-svelte components + CLI: add/update/fix components, composition, forms, icons, styling, components.json (official skill from huntabyte/shadcn-svelte). | [SKILL.md](skills/shadcn-svelte/SKILL.md) |
 | `testing-python` | pytest for the rask suite — importlib import-mode, explicit testpaths, the slow marker, async + respx HTTP mocking. | [SKILL.md](skills/testing-python/SKILL.md) |
 | `turborepo` | Turborepo monorepo build system — turbo.json task pipelines, caching/remote cache, --filter/--affected, CI optimization, boundaries. | [SKILL.md](skills/turborepo/SKILL.md) |
 | `writing-python` | Idiomatic Python 3.14+ — type safety, Pydantic-first patterns, error handling, config, CLI. | [SKILL.md](skills/writing-python/SKILL.md) |
