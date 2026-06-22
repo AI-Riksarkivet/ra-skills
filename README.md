@@ -36,7 +36,7 @@ For example:
 
 ```text
 /plugin install writing-python@ra-skills
-/plugin install rask-architecture@ra-skills
+/plugin install fastapi@ra-skills
 ```
 
 ### VS Code
