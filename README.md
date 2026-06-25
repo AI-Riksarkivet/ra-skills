@@ -137,7 +137,7 @@ the Gradio installer).
 
 ra-skills holds **only shared, reusable skills** (language + toolchain): `writing-python`,
 `writing-typescript`, `fastapi`, `testing-python`, `python-infrastructure`, `otel`, `dagger`,
-`dockerfile`, `turborepo`, `shadcn-svelte`, `micro-frontends`, `playwright-cli`, `architecture-diagram`, `gsap`, `zensical-setup`, `zensical-authoring`.
+`dockerfile`, `turborepo`, `shadcn-svelte`, `micro-frontends`, `playwright-cli`, `architecture-diagram`, `gsap`, `svelte-flow`, `zensical-setup`, `zensical-authoring`.
 
 **Project-specific skills live with their project, not here** — e.g. rask's `rask-*`
 architecture/pipeline/orchestrator skills are vendored in the rask repo's `.claude/skills/`, and
@@ -158,6 +158,7 @@ the shared marketplace.
 | `playwright-cli` | Drive a browser + author Playwright tests from the terminal via playwright-cli (Playwright MCP): navigate/click/fill/snapshot/eval, test generation, request mocking, tracing, storage-state, video. Official skill from @playwright/cli (Apache-2.0, Microsoft). | [SKILL.md](skills/playwright-cli/SKILL.md) |
 | `python-infrastructure` | System-reliability Python: NATS JetStream jobs, Dapr workflows, tenacity retries, Redis cache, OTLP. | [SKILL.md](skills/python-infrastructure/SKILL.md) |
 | `shadcn-svelte` | shadcn-svelte components + CLI: add/update/fix components, composition, forms, icons, styling, components.json (official skill from huntabyte/shadcn-svelte). | [SKILL.md](skills/shadcn-svelte/SKILL.md) |
+| `svelte-flow` | Svelte Flow (@xyflow/svelte) node-based UI / flow-graph / diagram editors for the SvelteKit frontend — biased to SvelteKit 2 + Svelte 5 (runes): the <SvelteFlow /> component, custom nodes & edges, handles, Background/Controls/MiniMap/Panel, hooks (useSvelteFlow, useNodes/useEdges, useNodeConnections, useUpdateNodeInternals, …), edge-path utils (getBezierPath/getSmoothStepPath/getStraightPath), graph utils (addEdge, getIncomers/getOutgoers, getConnectedEdges), connection validation, reconnectable edges, sub-flows, theming, SSR, TypeScript generics, and external layouting (dagre/d3/elkjs). Encodes the Svelte 5 reality Claude gets wrong — nodes/edges are $state.raw and immutable, bind:nodes/edges, hooks return .current inside the flow context, import the stylesheet — with copy-paste SvelteKit templates and a reference per topic. API verified against @xyflow/svelte 1.6. | [SKILL.md](skills/svelte-flow/SKILL.md) |
 | `testing-python` | pytest for the rask suite — importlib import-mode, explicit testpaths, the slow marker, async + respx HTTP mocking. | [SKILL.md](skills/testing-python/SKILL.md) |
 | `turborepo` | Turborepo monorepo build system — turbo.json task pipelines, caching/remote cache, --filter/--affected, CI optimization, boundaries. | [SKILL.md](skills/turborepo/SKILL.md) |
 | `writing-python` | Idiomatic Python 3.14+ — type safety, Pydantic-first patterns, error handling, config, CLI. | [SKILL.md](skills/writing-python/SKILL.md) |
@@ -174,7 +175,7 @@ the shared marketplace.
 
 ### 1. RA-owned skills — **vendored here** (this repo)
 
-The 16 skills above. Repos consume them as a marketplace (`/plugin install <name>@ra-skills`),
+The 17 skills above. Repos consume them as a marketplace (`/plugin install <name>@ra-skills`),
 **not** by copying into `.claude/skills/` — that copy-vendoring is exactly what caused the drift
 this repo fixes.
 
