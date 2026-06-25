@@ -72,18 +72,32 @@ Two ways to wire ra-skills into a consuming repo:
 /plugin install gsap@ra-skills                         # install the skills you want
 ```
 
-Get the latest:
+**Install several / all at once:** there is **no single "install everything" command** — `install`
+takes one plugin. Repeat it, or loop from your shell (CLI form). Usually you want a *subset*, not all
+16 (the team-wide config below is the cleaner way to pin an agreed set):
 
-```text
-/plugin marketplace update ra-skills                   # refresh the catalog (picks up NEW skills)
-/plugin install gsap@ra-skills                         # re-run install to bump an INSTALLED skill
-/plugin list                                           # see what's installed + context cost
+```bash
+for p in writing-python writing-typescript fastapi testing-python python-infrastructure otel \
+         dagger dockerfile turborepo shadcn-svelte micro-frontends playwright-cli \
+         architecture-diagram gsap zensical-setup zensical-authoring; do
+  claude plugin install "$p@ra-skills"
+done
 ```
 
-> **Refreshing the catalog ≠ updating installed skills.** `/plugin marketplace update` fetches the
-> latest `marketplace.json` so newly added skills appear and become installable — but already-installed
-> plugins do **not** auto-update by default for third-party marketplaces. Re-run
-> `/plugin install <name>@ra-skills` to bump one, or turn on auto-update (below).
+Get the latest — **only when you want new/updated skills, _not_ every session:**
+
+```text
+/plugin marketplace update ra-skills                   # refresh the catalog (discovers NEW skills)
+/plugin update gsap@ra-skills                           # update one INSTALLED skill to latest
+/plugin list                                            # see what's installed + context cost
+```
+
+> **You do not run this every session.** Installed skills are cached and load automatically in every
+> new session — installing is a **one-time** action. `/plugin marketplace update` only *picks up
+> skills added or changed since you last refreshed*, and **refreshing the catalog ≠ updating installed
+> skills**: it makes new skills installable, but already-installed ones don't auto-update by default
+> for third-party marketplaces. Bump one with `/plugin update <name>@ra-skills` (re-running `install`
+> also works), or set `"autoUpdate": true` (below) and you never run any of this by hand.
 
 ### Team-wide (committed — recommended)
 
