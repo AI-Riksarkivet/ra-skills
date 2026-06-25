@@ -152,6 +152,7 @@ Caveats to tell the user: clipboard needs a **user gesture + secure context** (h
 ## Common pitfalls
 
 - **`</script>` in a payload breaks the page.** A payload template literal containing `</script>` (or `</style>`) closes the main script block. Escape as `<\/script>`.
+- **Don't script template edits by anchoring on bare tag names.** Edit the regions by hand. Several tags recur (there are two `<style>` blocks; `title`/`header` text appears in both the head and the body), so a build script doing `text.index("<header>")` or a regex like `<header>…</header>` can match the wrong occurrence and silently delete the `<style>` block — leaving an unstyled, dead page. If you must automate, anchor on the unique `{{…}}` placeholders or class selectors (`.stage`, `.flowtabs`, `.legend`), not on tag names.
 - **Cramped / narrow diagrams.** The most common complaint. There's **no hard node cap** — the only number is a **≥12% horizontal-gap** spacing rule (not a node count). Spread nodes across the full width, scale them up, and split a sprawling system into per-area diagrams ("ingest" vs "serving") rather than squeezing everything in.
 - **Too many flows.** >6 flows clutter the tab bar; 3–6 is the sweet spot. Group read vs write flows into separate files if needed.
 - **Modes that aren't modes.** If the toggle changes which services exist or the protocol, it's a second system — build two diagrams.
