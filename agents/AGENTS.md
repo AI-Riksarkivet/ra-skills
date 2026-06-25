@@ -3,6 +3,7 @@
 You have additional SKILLs documented in directories containing a "SKILL.md" file.
 
 These skills are:
+ - architecture-diagram -> "skills/architecture-diagram/SKILL.md"
  - dagger -> "skills/dagger/SKILL.md"
  - dockerfile -> "skills/dockerfile/SKILL.md"
  - fastapi -> "skills/fastapi/SKILL.md"
@@ -22,6 +23,7 @@ IMPORTANT: You MUST read the SKILL.md file whenever the description of the skill
 
 <available_skills>
 
+architecture-diagram: `"Build architecture diagrams for the rask / Riksarkivet platform as a single self-contained HTML file — two modes from one skill. (1) INTERACTIVE click-through diagrams: animated step-by-step data flows, mode toggles (dev/prod · local/cloud · v1/v2), a side panel with payloads, dark/light theme, drag-to-reposition — for workshops, design reviews, onboarding, and designing a new service's flows before building. (2) STATIC export-ready topology snapshots: polished boxes-and-arrows with cloud-region / Kubernetes-cluster / security-group / micro-frontend-zone boundary containers — for decks, docs, and reports. BOTH modes have built-in PNG / PDF / clipboard export. Biased to the RA stack: Ray, Argo Workflows, GitOps (Argo CD), Kubernetes, NATS JetStream, Dapr, Redis, FastAPI, SvelteKit, turborepo, micro-frontends, HF Hub, OpenTelemetry, the HTR pipeline. Use when asked to visualize, design, or document a system: architecture diagram, service map, data/ETL flow, RAG/agentic flow, microservices or micro-frontend topology, HTR pipeline, CI/CD or GitOps deploy, onboarding diagram. NOT for static inline diagrams that belong in a markdown file (use a Mermaid flowchart) or hand-built slides."`
 dagger: `Write Dagger modules and functions in Go for container builds, CI/CD pipelines, and workflow automation. Use when: dagger, dagger module, dagger function, dagger call, dagger shell, dagger init, CI/CD pipeline as code, container build with dagger, publish container image, dagger SDK, daggerverse, dagger toolchain, dagger Go SDK, programmable CI, build-test-push pipeline, dagger.json, dag.Container, dag.Directory, multi-stage container build, dagger cloud, trivy scan, SBOM generation, vulnerability scanning, provenance attestation, cosign signing, supply chain security, docker compose dagger, service binding, dagger-for-github action, publish docker registry, publish pypi. Also use when the user wants to replace shell scripts or YAML CI configs with typed, composable Go code that runs identically locally and in CI.`
 dockerfile: `Author production dockerfiles. Use when adding a new containerized image, modifying a *.dockerfile, debugging a slow/large build, or reviewing a dockerfile for security and cache efficiency. Enforces the .docker/<name>.dockerfile + repo-root build-context contract (the RA/rask convention) consumed by the dagger build system.`
 fastapi: `FastAPI best practices, conventions, and production project templates. Use when writing or refactoring FastAPI APIs and Pydantic models, or when scaffolding a new FastAPI project with async patterns, dependency injection, repositories, services, auth, and tests.`

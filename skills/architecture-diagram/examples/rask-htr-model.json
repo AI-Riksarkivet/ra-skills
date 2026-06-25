@@ -1,0 +1,137 @@
+{
+  "system": "rask HTR Model · Forward Pass + Training Step",
+  "audience": "ML engineers working on the HTR model (TrOCR-style image-encoder → text-decoder)",
+  "language": "en",
+  "modes": ["train", "eval"],
+  "mode_descriptions": {
+    "train": "Training loop on Ray Train (TorchTrainer · DDP · GPU). Dropout on, autograd on; DataLoader/Ray Data streams batches, loss is computed, backward + optimizer.step() update weights, checkpoints are written and promoted to HF Hub.",
+    "eval": "Inference / validation. model.eval() disables dropout, everything runs under torch.no_grad(); loss and optimizer are skipped (eval reports CER/WER as a metric, not a training signal); batch size drops to 1 for per-page transcription."
+  },
+  "nodes": [
+    {
+      "id": "data", "role": "seed",
+      "position": "left: 2%; top: 42%",
+      "label": { "default": "DataLoader / Ray Data" },
+      "tech":  { "train": "collate · augment · shuffle · map_batches", "eval": "single page · no augment" },
+      "port":  { "train": "batch [B,3,H,W]", "eval": "[1,3,H,W]" }
+    },
+    {
+      "id": "backbone", "role": "embed",
+      "position": "left: 22%; top: 42%",
+      "label": { "default": "Image Encoder" },
+      "tech":  { "default": "ViT backbone · patch embed · dropout" },
+      "port":  { "default": "[B,3,H,W] → [B,768,h,w]" }
+    },
+    {
+      "id": "decoder", "role": "embed",
+      "position": "left: 42%; top: 42%",
+      "label": { "default": "Transformer Decoder" },
+      "tech":  { "default": "self-attn + cross-attn · N layers · d=768" },
+      "port":  { "default": "[B,768,h·w] → [B,T,768]" }
+    },
+    {
+      "id": "head", "role": "embed",
+      "position": "left: 62%; top: 42%",
+      "label": { "default": "Output Head" },
+      "tech":  { "default": "Linear → vocab · CTC / LM logits" },
+      "port":  { "default": "[B,T,768] → [B,T,vocab]" }
+    },
+    {
+      "id": "loss", "role": "compute",
+      "position": "left: 62%; top: 12%",
+      "label": { "train": "Loss", "eval": "Metric (CER/WER)" },
+      "tech":  { "train": "CTC / CrossEntropy · reduction=mean", "eval": "decode + score · no grad" },
+      "port":  { "train": "logits + targets → scalar", "eval": "disabled (no_grad)" }
+    },
+    {
+      "id": "optim", "role": "seed",
+      "position": "left: 42%; top: 12%",
+      "label": { "default": "Optimizer Step" },
+      "tech":  { "train": "loss.backward() · AdamW · lr sched", "eval": "skipped (eval mode)" },
+      "port":  { "train": "grads → param update", "eval": "—" },
+      "modes": ["train"]
+    },
+    {
+      "id": "raytrain", "role": "compute",
+      "position": "left: 22%; top: 12%",
+      "label": { "default": "Ray Train" },
+      "tech":  { "default": "TorchTrainer · DDP · N workers · GPU" },
+      "port":  { "default": "data-parallel · all-reduce grads" },
+      "modes": ["train"]
+    },
+    {
+      "id": "ckpt", "role": "vector",
+      "position": "left: 82%; top: 12%",
+      "label": { "default": "Checkpoint Store" },
+      "tech":  { "default": "state_dict · optimizer · step/epoch" },
+      "port":  { "default": "ckpt-{step}.pt → HF Hub" },
+      "modes": ["train"]
+    },
+    {
+      "id": "text", "role": "vector",
+      "position": "left: 82%; top: 42%",
+      "label": { "default": "Decoded Text" },
+      "tech":  { "default": "argmax / beam decode · detokenize" },
+      "port":  { "default": "[B,T,vocab] → string" }
+    },
+    {
+      "id": "hfhub", "role": "vector",
+      "position": "left: 82%; top: 72%",
+      "label": { "default": "Hugging Face Hub" },
+      "tech":  { "default": "model registry · push promoted weights" },
+      "port":  { "default": "huggingface.co (external)" },
+      "modes": ["train"]
+    }
+  ],
+  "flows": [
+    {
+      "key": "forward_pass",
+      "name": "Forward Pass (page image → text)",
+      "purpose": "Altitude 1: the model as a flow. A scanned page tensor runs through the image encoder, transformer decoder, and output head, then is decoded to text. Tensor shapes ride along as payloads. Same path in train and eval — eval just runs it under no_grad with batch size 1.",
+      "step_count": 5,
+      "step_outline": [
+        "data → backbone   : page image [B,3,H,W] (eval: [1,3,H,W])",
+        "backbone → decoder: visual features [B,768,h,w] → flattened [B,768,h·w]",
+        "decoder → head    : decoder hidden states [B,T,768]",
+        "head → text       : logits [B,T,vocab]",
+        "text → text       : argmax / beam decode → \"transcribed text\""
+      ]
+    },
+    {
+      "key": "train_step",
+      "name": "Training Step (one optimizer.step())",
+      "purpose": "Altitude 2: the training loop for a single step. DataLoader / Ray Data yields a batch, the model runs the forward pass, CTC/CE loss is computed against targets, loss.backward() fills grads (all-reduced across Ray Train workers), optimizer.step() updates weights, then the checkpoint is written and promoted to HF Hub. Train-only — eval skips loss/backward/optimizer.",
+      "step_count": 8,
+      "only_mode": "train",
+      "step_outline": [
+        "raytrain → data    : worker pulls batch [B,3,H,W] + targets",
+        "data → backbone    : forward pass through encoder/decoder/head → logits [B,T,vocab]",
+        "head → loss        : CTC / CrossEntropy(logits, targets) → scalar",
+        "loss → optim       : loss.backward() → grads",
+        "optim → raytrain   : DDP all-reduce grads across workers",
+        "optim → backbone   : AdamW optimizer.step() · lr sched → updated weights",
+        "raytrain → ckpt    : write state_dict + optimizer + step",
+        "ckpt → hfhub       : promote checkpoint → push to model registry"
+      ]
+    },
+    {
+      "key": "eval_step",
+      "name": "Eval Step (validation / inference)",
+      "purpose": "Inference path: model.eval() (dropout off) under torch.no_grad(), batch size 1. Runs the same forward pass but reports CER/WER as a metric instead of a training loss — no backward, no optimizer, no checkpoint.",
+      "step_count": 3,
+      "only_mode": "eval",
+      "step_outline": [
+        "data → backbone : single page [1,3,H,W] · no_grad",
+        "backbone → text : forward pass → logits [1,T,vocab] → decoded text",
+        "head → loss     : compare to reference → CER / WER metric (no grad)"
+      ]
+    }
+  ],
+  "lessons": [
+    "Two altitudes, one model: forward_pass draws the model as a flow (encoder → decoder → head → decode); train_step wraps that same path in a loss + backward + optimizer.step() + checkpoint loop. Don't try to show both at full detail in one flow — toggle between them.",
+    "Tensor shapes are payloads, not nodes: [B,3,H,W] → [B,768,h,w] → [B,T,768] → [B,T,vocab] → string ride on the port/payload, keeping the node count low. This is a high-level model lens — for a per-layer graph reach for torchview / Netron / torchinfo / PlotNeuralNet instead.",
+    "train vs eval is a real mode toggle: eval disables loss, optimizer, and dropout, runs under no_grad, and swaps batch size to 1. node.modes / only_mode keep the loss, optimizer, Ray Train, checkpoint, and HF Hub nodes from showing in eval where they don't apply.",
+    "Six roles, no more: the three model blocks (backbone / decoder / head) all share the embed role (amber); loss and Ray Train are compute; DataLoader and optimizer are seed (one-shot per step); checkpoint store, decoded text, and HF Hub share vector. Distinct blocks, not distinct colors.",
+    "The HF Hub node is the model registry — checkpoints are promoted to it rather than drawing a separate registry node, mirroring how the ingest pipeline reuses the same HF Hub for pulling weights."
+  ]
+}

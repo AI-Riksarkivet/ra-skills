@@ -1,0 +1,112 @@
+{
+  "system": "rask Micro-Frontend Zones · turborepo",
+  "audience": "Frontend engineers onboarding to the micro-frontend composition model",
+  "language": "en",
+  "modes": ["build_time", "runtime"],
+  "mode_descriptions": {
+    "build_time": "Monorepo composition: host imports remotes as turborepo workspace packages at build time; one bundle, one deploy; remotes versioned by the lockfile",
+    "runtime": "Zone composition: an edge/zone router stitches independently-deployed remotes at request time (zones / module federation); each team ships its own bundle"
+  },
+  "nodes": [
+    {
+      "id": "browser", "role": "user",
+      "position": "left: 2%; top: 42%",
+      "label": { "default": "Browser" },
+      "tech":  { "default": "SvelteKit hydrated · URL-as-state" },
+      "port":  { "default": "rask.internal" }
+    },
+    {
+      "id": "zone_router", "role": "orch",
+      "position": "left: 22%; top: 42%",
+      "label": { "build_time": "Traefik (single app)", "runtime": "Zone Router (edge)" },
+      "tech":  { "build_time": "ingress → one bundle", "runtime": "Traefik · path → zone map" },
+      "port":  { "default": "rask.internal · :443" }
+    },
+    {
+      "id": "host", "role": "user",
+      "position": "left: 42%; top: 42%",
+      "label": { "default": "SvelteKit Host / Shell" },
+      "tech":  { "default": "@rask/web · layout · shared bus · auth" },
+      "port":  { "build_time": "import @rask/* packages", "runtime": "load remotes over HTTP" }
+    },
+    {
+      "id": "viewer", "role": "user",
+      "position": "left: 66%; top: 14%",
+      "label": { "default": "@rask/viewer" },
+      "tech":  { "build_time": "workspace package · tree-shaken", "runtime": "remote · own deploy" },
+      "port":  { "build_time": "packages/viewer", "runtime": "viewer.rask.internal" }
+    },
+    {
+      "id": "search", "role": "user",
+      "position": "left: 66%; top: 70%",
+      "label": { "default": "@rask/search" },
+      "tech":  { "build_time": "workspace package · tree-shaken", "runtime": "remote · own deploy" },
+      "port":  { "build_time": "packages/search", "runtime": "search.rask.internal" }
+    },
+    {
+      "id": "bff", "role": "orch",
+      "position": "left: 88%; top: 42%",
+      "label": { "default": "FastAPI BFF" },
+      "tech":  { "default": "FastAPI · Keycloak OIDC · per-zone routes" },
+      "port":  { "default": "api.rask.internal · :8000" }
+    }
+  ],
+  "flows": [
+    {
+      "key": "page_load",
+      "name": "Page Load (host pulls remotes)",
+      "purpose": "User hits a route → host shell renders → it composes the viewer + search remotes (imported at build time, fetched at runtime) → each remote calls the BFF for its own data.",
+      "step_count": 7,
+      "step_outline": [
+        "browser → zone_router : GET /documents/123/viewer",
+        "zone_router → host    : route to host shell (single app vs zone-mapped)",
+        "host → viewer         : mount @rask/viewer (import build_time · fetch runtime)",
+        "host → search         : mount @rask/search remote",
+        "viewer → bff          : GET /documents/123/transcript (props down: document_id)",
+        "search → bff          : GET /search?within=123",
+        "bff → browser         : hydrated shell + composed remotes painted"
+      ]
+    },
+    {
+      "key": "cross_app_event",
+      "name": "Cross-App Event (events up / props down)",
+      "purpose": "A click in @rask/search must drive @rask/viewer. The remote emits an event up to the host's shared bus; the host pushes new props down to the sibling remote. No remote imports another.",
+      "step_count": 6,
+      "step_outline": [
+        "search → host   : emit event up · {type: 'result.selected', line_id}",
+        "host → host     : shared bus · update URL-as-state (?line=…)",
+        "host → viewer   : props down · {line_id} (re-render, no remount)",
+        "viewer → bff    : GET /lines/{line_id} (fetch detail)",
+        "bff → viewer    : line crop + transcript",
+        "host → zone_router: push URL so a refresh/deep-link restores state"
+      ]
+    },
+    {
+      "key": "auth_handshake",
+      "name": "Auth Handshake (Keycloak OIDC)",
+      "purpose": "The host owns the session; remotes never see Keycloak directly. Host attaches the token; the BFF validates it once per zone.",
+      "step_count": 5,
+      "step_outline": [
+        "browser → host  : load shell (no token)",
+        "host → bff      : OIDC redirect / token exchange (Keycloak)",
+        "bff → host      : session cookie · access token in memory",
+        "host → viewer   : props down · auth context (token never in the remote's URL)",
+        "viewer → bff    : authorized data call"
+      ]
+    },
+    {
+      "key": "independent_deploy",
+      "name": "Independent Deploy (runtime zones)",
+      "purpose": "Ship @rask/search alone without rebuilding the host. The zone router points its path at the new remote bundle. Runtime-only — at build time the whole app is one bundle and can't deploy a remote alone.",
+      "step_count": 4,
+      "only_mode": "runtime"
+    }
+  ],
+  "lessons": [
+    "The host, viewer, and search all carry the user role (mint) — they are all frontend surfaces. They are told apart by label (@rask/viewer vs @rask/search), not by inventing a 7th color, and the BFF + zone router are the orch (sky) nodes.",
+    "build_time vs runtime is the composition-seam toggle, the one mode that matters here: same nodes, but the host either imports remotes as turborepo workspace packages (one bundle) or loads independently-deployed remotes via the zone router (module federation).",
+    "Cross-app communication is modeled explicitly: events up to the host's shared bus, props down to siblings, URL-as-state for deep-linking. No remote ever imports another remote — that is the rule the cross_app_event flow teaches.",
+    "Independent Deploy is runtime-only (only_mode='runtime'): in build_time mode the whole app is a single bundle, so you cannot deploy one remote in isolation.",
+    "The host owns auth: Keycloak/OIDC lives behind the BFF and the host passes an auth context down as props — remotes never carry the token in their URL, so build_time and runtime share one auth flow."
+  ]
+}

@@ -60,7 +60,7 @@ above. For Zed's native agent, point it at the generated
 
 ra-skills holds **only shared, reusable skills** (language + toolchain): `writing-python`,
 `writing-typescript`, `fastapi`, `testing-python`, `python-infrastructure`, `otel`, `dagger`,
-`dockerfile`, `turborepo`, `shadcn-svelte`, `micro-frontends`, `playwright-cli`, `zensical-setup`, `zensical-authoring`.
+`dockerfile`, `turborepo`, `shadcn-svelte`, `micro-frontends`, `playwright-cli`, `architecture-diagram`, `zensical-setup`, `zensical-authoring`.
 
 **Project-specific skills live with their project, not here** — e.g. rask's `rask-*`
 architecture/pipeline/orchestrator skills are vendored in the rask repo's `.claude/skills/`, and
@@ -71,6 +71,7 @@ the shared marketplace.
 <!-- BEGIN_SKILLS_TABLE -->
 | Name | Description | Documentation |
 |------|-------------|---------------|
+| `architecture-diagram` | Architecture diagrams for the rask platform as a single self-contained HTML file — interactive click-through flows (animated steps, mode toggles, side panel, drag) OR static export-ready topology snapshots with cloud/cluster/security-group/zone boundaries; both with built-in PNG/PDF/clipboard export. Biased to the RA stack: Ray, Argo Workflows, GitOps, Kubernetes, NATS JetStream, Dapr, Redis, FastAPI, SvelteKit, turborepo, micro-frontends, HF Hub, OpenTelemetry, the HTR pipeline. | [SKILL.md](skills/architecture-diagram/SKILL.md) |
 | `dagger` | Dagger modules/functions in Go for container builds and CI/CD as typed, composable pipelines. | [SKILL.md](skills/dagger/SKILL.md) |
 | `dockerfile` | Production dockerfiles — multi-stage discipline, BuildKit cache mounts, hadolint, the .docker build-context contract. | [SKILL.md](skills/dockerfile/SKILL.md) |
 | `fastapi` | FastAPI + Pydantic production patterns: async, dependency injection, repositories, services, tests. | [SKILL.md](skills/fastapi/SKILL.md) |
@@ -95,7 +96,7 @@ the shared marketplace.
 
 ### 1. RA-owned skills — **vendored here** (this repo)
 
-The 14 skills above. Repos consume them as a marketplace (`/plugin install <name>@ra-skills`),
+The 15 skills above. Repos consume them as a marketplace (`/plugin install <name>@ra-skills`),
 **not** by copying into `.claude/skills/` — that copy-vendoring is exactly what caused the drift
 this repo fixes.
 

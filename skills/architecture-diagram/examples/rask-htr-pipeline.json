@@ -1,0 +1,142 @@
+{
+  "system": "rask HTR Pipeline · Ingest + Serving",
+  "audience": "Engineers onboarding to the HTR document-processing platform",
+  "language": "en",
+  "modes": ["dev", "prod"],
+  "mode_descriptions": {
+    "dev": "Docker Compose on a workstation; single Ray Serve replica per stage; Argo Workflows in a kind cluster; models pulled once from HF Hub then cached on disk",
+    "prod": "On-prem Kubernetes; Ray autoscaling worker pool; Ray Serve scaled per stage (segmentation/transcription/post-processing); NATS JetStream + Postgres HA; OTel shipping traces to the platform collector"
+  },
+  "nodes": [
+    {
+      "id": "ui", "role": "user",
+      "position": "left: 2%; top: 42%",
+      "label": { "default": "SvelteKit Upload" },
+      "tech":  { "default": "SvelteKit · drag-drop · multipart" },
+      "port":  { "dev": ":5173", "prod": "rask.internal" }
+    },
+    {
+      "id": "gateway", "role": "orch",
+      "position": "left: 20%; top: 42%",
+      "label": { "default": "FastAPI Gateway" },
+      "tech":  { "default": "FastAPI · uvicorn · Keycloak OIDC" },
+      "port":  { "dev": ":8000", "prod": "api.rask.internal · :8000" }
+    },
+    {
+      "id": "argo", "role": "orch",
+      "position": "left: 38%; top: 12%",
+      "label": { "default": "Argo Workflows" },
+      "tech":  { "default": "DAG controller · htr-ingest template" },
+      "port":  { "dev": "kind · :2746", "prod": "argo.rask.internal" }
+    },
+    {
+      "id": "nats", "role": "vector",
+      "position": "left: 38%; top: 72%",
+      "label": { "default": "NATS JetStream" },
+      "tech":  { "default": "events · htr.page.* subjects · durable" },
+      "port":  { "dev": ":4222", "prod": "nats.rask.internal · :4222" }
+    },
+    {
+      "id": "rayserve", "role": "compute",
+      "position": "left: 56%; top: 42%",
+      "label": { "default": "Ray Serve" },
+      "tech":  { "dev": "Ray head · 1 replica/stage", "prod": "Ray autoscale · GPU worker pool" },
+      "port":  { "dev": ":8265 dash · :8000 serve", "prod": "ray-head.rask.internal" }
+    },
+    {
+      "id": "stages", "role": "embed",
+      "position": "left: 74%; top: 12%",
+      "label": { "default": "HTR Stages" },
+      "tech":  { "default": "segmentation → transcription → post-processing" },
+      "port":  { "default": "deployment graph" }
+    },
+    {
+      "id": "state", "role": "vector",
+      "position": "left: 74%; top: 72%",
+      "label": { "dev": "Redis + Postgres", "prod": "Redis + Postgres HA" },
+      "tech":  { "dev": "Redis cache · Postgres 16 single", "prod": "Redis · Postgres 16 · Multi-replica" },
+      "port":  { "dev": ":6379 · :5432", "prod": "pg.rask.internal · :5432" }
+    },
+    {
+      "id": "artifacts", "role": "vector",
+      "position": "left: 92%; top: 42%",
+      "label": { "default": "Artifact Store" },
+      "tech":  { "default": "page/line images · PAGE-XML · ALTO" },
+      "port":  { "dev": "minio :9000", "prod": "s3-compatible · on-prem" }
+    },
+    {
+      "id": "hfhub", "role": "vector",
+      "position": "left: 92%; top: 12%",
+      "label": { "default": "Hugging Face Hub" },
+      "tech":  { "default": "HTR models · pull on warm-up" },
+      "port":  { "default": "huggingface.co (external)" }
+    },
+    {
+      "id": "otel", "role": "orch",
+      "position": "left: 2%; top: 12%",
+      "label": { "default": "OTel Collector" },
+      "tech":  { "default": "OTLP · traces / metrics" },
+      "port":  { "dev": ":4317", "prod": "otel-collector.rask.internal · :4317" },
+      "modes": ["prod"]
+    }
+  ],
+  "flows": [
+    {
+      "key": "htr_ingest",
+      "name": "HTR Ingest (POST /documents)",
+      "purpose": "Main pipeline. Upload a scanned document → Argo DAG fans out per page → Ray Serve runs segmentation, transcription, post-processing → artifacts + transcript stored.",
+      "step_count": 9,
+      "step_outline": [
+        "ui → gateway      : POST /documents multipart {file, collection_id}",
+        "gateway → artifacts: put raw scan, mint document_id",
+        "gateway → argo     : submit htr-ingest Workflow {document_id, pages}",
+        "argo → rayserve    : per-page step calls Serve deployment graph",
+        "rayserve → stages  : segmentation → transcription → post-processing",
+        "stages → artifacts : write PAGE-XML / ALTO + line crops",
+        "rayserve → nats    : publish htr.page.done {document_id, page, status}",
+        "argo → state       : upsert document + page status (Postgres), cache in Redis",
+        "gateway → ui       : 202 {document_id, status: queued, poll_url}"
+      ]
+    },
+    {
+      "key": "status_poll",
+      "name": "Status Poll (GET /documents/{id})",
+      "purpose": "Frontend polls progress while the DAG runs. Reads aggregated page status from state, no recompute.",
+      "step_count": 4,
+      "step_outline": [
+        "ui → gateway   : GET /documents/{id}",
+        "gateway → state: read aggregated page status (Redis hit, Postgres miss)",
+        "gateway → nats : subscribe htr.page.* for live updates (optional SSE)",
+        "gateway → ui   : {document_id, pages_done, pages_total, transcript_url?}"
+      ]
+    },
+    {
+      "key": "reprocess",
+      "name": "Reprocess (POST /documents/{id}/reprocess)",
+      "purpose": "Re-run a document against a newer model version. Re-submits the DAG; reuses the stored raw scan, overwrites artifacts.",
+      "step_count": 6,
+      "step_outline": [
+        "ui → gateway     : POST /documents/{id}/reprocess {model_rev}",
+        "gateway → hfhub  : ensure model_rev pulled / warm on Ray Serve",
+        "gateway → argo   : re-submit htr-ingest {document_id, model_rev, force}",
+        "argo → rayserve  : re-run stages on cached raw scan",
+        "rayserve → artifacts: overwrite PAGE-XML / ALTO",
+        "argo → state     : bump document version, invalidate Redis"
+      ]
+    },
+    {
+      "key": "model_warmup",
+      "name": "Model Warm-up (prod startup)",
+      "purpose": "On Ray Serve start, each HTR stage pulls its model from HF Hub once and caches it. Prod-only — dev uses an already-cached on-disk model.",
+      "step_count": 4,
+      "only_mode": "prod"
+    }
+  ],
+  "lessons": [
+    "Argo Workflows is the DAG controller (orch); the per-page work is delegated to Ray Serve (compute), and the three HTR stages are modeled as a single embed node — segmentation → transcription → post-processing — to keep the role count at 6.",
+    "NATS JetStream carries htr.page.* events so the gateway can stream progress without polling the database on every request. Status poll reads Redis first, Postgres on miss.",
+    "Redis + Postgres share the single vector role (violet) and are distinguished by label, not a 7th color — same trick for the artifact store and HF Hub.",
+    "The OTel collector and the model warm-up flow are prod-only: dev caches models on disk and skips the central collector, so node.modes and only_mode keep dev from showing a broken state.",
+    "dev vs prod is a true mode toggle — same topology, only replicas/ports/HA swap. It does NOT change which services exist (except the prod-only OTel side-concern), so one diagram covers both."
+  ]
+}

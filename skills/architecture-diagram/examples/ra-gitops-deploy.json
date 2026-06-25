@@ -1,0 +1,117 @@
+{
+  "system": "rask GitOps Deploy · Argo CD",
+  "audience": "Engineers onboarding to the deployment + release process",
+  "language": "en",
+  "modes": ["staging", "prod"],
+  "mode_descriptions": {
+    "staging": "Auto-sync on merge to main; no approval gate; deploys to the staging namespace on the on-prem cluster",
+    "prod": "Manual sync gate; Argo CD syncs the prod namespace; drift detection + self-heal enabled; rollout watched via OTel"
+  },
+  "nodes": [
+    {
+      "id": "repo", "role": "user",
+      "position": "left: 2%; top: 42%",
+      "label": { "default": "Git Repo" },
+      "tech":  { "default": "app + GitOps manifests · monorepo" },
+      "port":  { "default": "git.rask.internal" }
+    },
+    {
+      "id": "ci", "role": "seed",
+      "position": "left: 22%; top: 42%",
+      "label": { "default": "Dagger CI" },
+      "tech":  { "default": "Dagger pipeline · GitHub Actions runner" },
+      "port":  { "dev": "self-hosted · arm64", "staging": "self-hosted · arm64", "prod": "self-hosted · arm64" }
+    },
+    {
+      "id": "registry", "role": "vector",
+      "position": "left: 42%; top: 14%",
+      "label": { "default": "Container Registry" },
+      "tech":  { "default": "OCI images · signed (cosign)" },
+      "port":  { "default": "registry.rask.internal" }
+    },
+    {
+      "id": "argocd", "role": "orch",
+      "position": "left: 42%; top: 70%",
+      "label": { "staging": "Argo CD (staging)", "prod": "Argo CD (prod)" },
+      "tech":  { "staging": "GitOps · auto-sync", "prod": "GitOps · manual gate · self-heal" },
+      "port":  { "default": "argocd.rask.internal" }
+    },
+    {
+      "id": "cluster", "role": "compute",
+      "position": "left: 66%; top: 42%",
+      "label": { "staging": "K8s · staging ns", "prod": "K8s · prod ns" },
+      "tech":  { "staging": "on-prem · 3 nodes", "prod": "on-prem · 12 nodes · HA" },
+      "port":  { "staging": "staging.rask.internal", "prod": "rask.internal" }
+    },
+    {
+      "id": "services", "role": "orch",
+      "position": "left: 86%; top: 14%",
+      "label": { "default": "Running Services" },
+      "tech":  { "default": "FastAPI · Ray Serve · SvelteKit · Traefik" },
+      "port":  { "default": "Deployments + Rollouts" }
+    },
+    {
+      "id": "state", "role": "vector",
+      "position": "left: 86%; top: 70%",
+      "label": { "staging": "Postgres (staging)", "prod": "Postgres HA (prod)" },
+      "tech":  { "staging": "Postgres 16 · single", "prod": "Postgres 16 · Multi-replica" },
+      "port":  { "default": "pg.rask.internal · :5432" }
+    }
+  ],
+  "flows": [
+    {
+      "key": "deploy",
+      "name": "Deploy (git push → sync)",
+      "purpose": "Main release flow: merge to main → Dagger CI builds + pushes a signed image → bumps the manifest → Argo CD detects the change and syncs the cluster → rollout completes.",
+      "step_count": 7,
+      "step_outline": [
+        "repo → ci         : merge to main triggers Dagger pipeline",
+        "ci → ci           : lint · test · build (internal stages)",
+        "ci → registry     : push signed image tag",
+        "ci → repo         : commit new image digest to GitOps manifest",
+        "argocd → repo     : poll / webhook detects manifest drift from live",
+        "argocd → cluster  : sync · apply Deployment (auto on staging, gated on prod)",
+        "cluster → services: rolling update · health checks pass"
+      ]
+    },
+    {
+      "key": "rollback",
+      "name": "Rollback",
+      "purpose": "A release went bad. Revert the GitOps manifest to the previous digest; Argo CD syncs the known-good image. No rebuild.",
+      "step_count": 5,
+      "step_outline": [
+        "repo → repo       : revert manifest commit to previous digest",
+        "argocd → repo     : detect the reverted manifest",
+        "argocd → registry : resolve the previous (already-pushed) image",
+        "argocd → cluster  : sync · redeploy previous revision",
+        "cluster → state   : verify schema compatibility (no forward migration)"
+      ]
+    },
+    {
+      "key": "drift_detect",
+      "name": "Drift Detect (self-heal)",
+      "purpose": "Someone kubectl-edited live state out of band. Argo CD sees live ≠ Git and reconciles. Prod self-heals automatically; staging just flags OutOfSync.",
+      "step_count": 4,
+      "step_outline": [
+        "argocd → cluster  : compare live manifests vs Git (continuous)",
+        "argocd → argocd   : mark Application OutOfSync · diff",
+        "argocd → cluster  : self-heal sync (prod) · or flag only (staging)",
+        "cluster → services: live state reconciled back to Git desired state"
+      ]
+    },
+    {
+      "key": "promote",
+      "name": "Promote staging → prod",
+      "purpose": "Promote the exact staging digest into the prod manifest behind the manual sync gate. Prod-only — staging auto-syncs and has nothing to promote into.",
+      "step_count": 4,
+      "only_mode": "prod"
+    }
+  ],
+  "lessons": [
+    "Git is the single source of truth: CI never kubectl-applies — it commits an image digest to the GitOps manifest, and Argo CD (orch) is the only thing that touches the cluster. That pull-based seam is the whole point of GitOps.",
+    "Staging and prod share one pipeline shape and differ only by mode: auto-sync vs a manual gate, self-heal on/off, and cluster size. Same flow, different deployment context — a textbook mode use.",
+    "Rollback and drift-detect reuse already-pushed images, so they have no build step — they are pure Argo CD sync flows, which is why they are short.",
+    "Promote is prod-only (only_mode='prod') because staging auto-syncs from main and has no gate to promote through.",
+    "The registry and Postgres both use the vector role (violet) and are told apart by label, keeping the diagram inside the 6-role cap."
+  ]
+}
