@@ -25,6 +25,10 @@ terminal, VS Code, or Zed) loads the `SKILL.md` when the description matches you
 
 ## Installation
 
+> You **consume** ra-skills as a **marketplace** — you never `git clone` or copy this repo into your
+> project. Per-developer setup is below; for **committed, team-wide** config and **how to get the
+> latest**, see [Updating & staying current](#updating--staying-current).
+
 ### Claude Code
 
 ```text
@@ -55,6 +59,65 @@ above. For Zed's native agent, point it at the generated
 > Scope: ra-skills targets the **Claude ecosystem** (Claude Code in the terminal, VS Code, and
 > Zed) plus the `AGENTS.md` standard those editors consume. It deliberately ships **no** Gemini,
 > Codex, or Cursor manifests.
+
+## Updating & staying current
+
+You pull skills **from the marketplace** — there is **no clone, no copy** into `.claude/skills/`.
+Two ways to wire ra-skills into a consuming repo:
+
+### Per-developer (quick)
+
+```text
+/plugin marketplace add AI-Riksarkivet/ra-skills      # one time
+/plugin install gsap@ra-skills                         # install the skills you want
+```
+
+Get the latest:
+
+```text
+/plugin marketplace update ra-skills                   # refresh the catalog (picks up NEW skills)
+/plugin install gsap@ra-skills                         # re-run install to bump an INSTALLED skill
+/plugin list                                           # see what's installed + context cost
+```
+
+> **Refreshing the catalog ≠ updating installed skills.** `/plugin marketplace update` fetches the
+> latest `marketplace.json` so newly added skills appear and become installable — but already-installed
+> plugins do **not** auto-update by default for third-party marketplaces. Re-run
+> `/plugin install <name>@ra-skills` to bump one, or turn on auto-update (below).
+
+### Team-wide (committed — recommended)
+
+Commit this to the **consuming** repo's `.claude/settings.json`. On a fresh checkout, once the
+teammate trusts the folder, the marketplace auto-registers and the listed skills install
+automatically — still no clone:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "ra-skills": {
+      "source": { "source": "github", "repo": "AI-Riksarkivet/ra-skills" },
+      "autoUpdate": true
+    }
+  },
+  "enabledPlugins": {
+    "writing-python@ra-skills": true,
+    "writing-typescript@ra-skills": true,
+    "gsap@ra-skills": true
+  }
+}
+```
+
+`"autoUpdate": true` keeps installed skills current automatically (it's **off** by default for
+third-party marketplaces, so set it explicitly). Pin to an exact release instead by adding
+`"ref": "v1.2.3"` (a tag/branch/sha) under `source`.
+
+### Getting *everything* (the full RA surface)
+
+ra-skills is only **scope 1**. A fully-equipped checkout also needs the referenced marketplaces
+(§2), the MCP servers (§3), and the vendor-CLI skills like Gradio (§4) — see
+[What we use](#what-we-use--the-full-ra-claude-surface). That complete set is what
+`make claude-bootstrap` wires up in each consuming repo (add new entries there as we adopt them, e.g.
+the Gradio installer).
 
 ## Skills
 
