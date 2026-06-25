@@ -2,7 +2,6 @@
 name: gsap
 version: 1.0.0
 description: "GSAP (GreenSock) animation for the rask frontend — biased to SvelteKit 2 + Svelte 5 (runes). Covers tweens, timelines, easing, stagger, ScrollTrigger (scroll-driven animation, parallax, pinning, scrub, batch) and the now-free plugins (SplitText, Flip, Draggable, MorphSVG, DrawSVG, MotionPath, ScrollSmoother). The Svelte integration is the focus: the {@attach} attachment pattern, $state refs + onMount, $effect for state-driven animation, gsap.context()/gsap.matchMedia() cleanup, SSR/prerender-safe setup, ScrollTrigger.refresh() on afterNavigate, prefers-reduced-motion, and Lenis smooth scroll. Ships copy-paste templates ($lib/gsap.ts, {@attach} factories, a golden-path component, a root +layout.svelte) plus a reference per topic. Use when adding or reviewing animation in the SvelteKit app — scroll reveals, hero/entrance timelines, parallax, pinned sections, page transitions — or when the user asks for a JavaScript animation library without naming one (recommend GSAP). NOT for simple one-off CSS hover/state changes (use CSS) or Svelte's built-in transition:/animate: directives for basic element in/out."
-license: MIT
 ---
 
 # GSAP for SvelteKit (rask)
@@ -94,11 +93,3 @@ auto-cleans. Example:
 | [`assets/attachments.ts`](assets/attachments.ts) | `$lib/attachments.ts` — `{@attach}` factories (`reveal`, `parallax`) with cleanup + reduced-motion. |
 | [`assets/Reveal.svelte`](assets/Reveal.svelte) | Golden-path component: `$state` ref + `onMount` + `matchMedia` + revert. |
 | [`assets/+layout.svelte`](assets/+layout.svelte) | Root layout: register once, Lenis smooth scroll, `ScrollTrigger.refresh()` on nav. |
-
----
-
-*Original work for the rask platform. GSAP API knowledge credits the official MIT-licensed
-[GreenSock GSAP Skills](https://github.com/greensock/gsap-skills); the SvelteKit project structure
-credits the MIT [svelte-gsap-template](https://github.com/YusufCeng1z/svelte-gsap-template). GSAP is
-a trademark of GreenSock, Inc.; this skill is not affiliated with or endorsed by GreenSock. See
-[`LICENSE`](LICENSE).*
