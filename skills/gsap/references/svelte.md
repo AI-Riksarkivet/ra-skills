@@ -8,12 +8,12 @@ GSAP's own primitives (`gsap.context()`, `gsap.matchMedia()`) plus Svelte's life
 ## Install
 
 ```bash
-npm i gsap            # the whole library + every plugin, free, no auth token
-npm i lenis           # optional: smooth scrolling (see "Smooth scroll" below)
+bun add gsap          # the whole library + every plugin, free, no auth token
+bun add lenis         # optional: smooth scrolling (see "Smooth scroll" below)
 ```
 
-GSAP and all plugins are free since Webflow acquired GreenSock — install from the **public** npm
-package. No Club membership, no `.npmrc`, no private registry. See `plugins.md`.
+GSAP and all plugins are free since Webflow acquired GreenSock — install the **public** `gsap`
+package with `bun add`. No Club membership, no `.npmrc`, no private registry. See `plugins.md`.
 
 ## The one rule that matters: register once, clean up always
 

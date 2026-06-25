@@ -12,7 +12,7 @@ framework-agnostic, but this skill is deliberately **Svelte-biased**: the hard p
 API, it's wiring it into Svelte's lifecycle without leaks or SSR crashes.
 
 > **GSAP is 100% free** — every plugin included — since Webflow acquired GreenSock. Install from the
-> public npm package (`npm i gsap`). No Club membership, no auth token, no `.npmrc`, no private
+> public `gsap` package (`bun add gsap`). No Club membership, no auth token, no `.npmrc`, no private
 > registry. Ignore any old docs that say otherwise.
 
 ## When to use

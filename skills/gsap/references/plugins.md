@@ -4,10 +4,10 @@
 
 Since Webflow's acquisition of GreenSock, **all** GSAP plugins — including the formerly Club-only
 ones (**SplitText**, **MorphSVG**, **DrawSVG**, **ScrollSmoother**, etc.) — are free, including for
-commercial use. Install from the **public** npm package:
+commercial use. Install the **public** `gsap` package:
 
 ```bash
-npm i gsap   # includes every plugin
+bun add gsap   # includes every plugin
 ```
 
 No Club membership, no auth token, no `.npmrc`, no private registry. If you find old setup docs

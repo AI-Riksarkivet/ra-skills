@@ -118,7 +118,18 @@ this repo fixes.
 | `svelte` (Svelte 5 MCP) | `bunx -y @sveltejs/mcp` | `make claude-bootstrap` → `claude mcp add -s local svelte` | local (per-developer, project) |
 | `ra-mcp` (Riksarkivet MCP) | claude.ai-hosted | added per-developer if used | user (optional) |
 
-### 4. Optional behavior overlays — **evaluated, not RA-owned**
+### 4. Vendor-CLI skills — **self-installing** (run once per machine; self-updating)
+
+Some tools ship their own official agent skill via a CLI installer. We **reference** these (run the
+installer) rather than copy-vendoring them — they self-update, so a vendored copy would immediately
+drift (the same reason §1 vendors only RA-owned skills). Run them at bootstrap (add to
+`make claude-bootstrap`).
+
+| Skill | Source | Install (per-developer, user scope) | Notes |
+|---|---|---|---|
+| `gradio` | `gradio-app/gradio` (official) | `uvx --with "huggingface_hub>=1.4.0" gradio skills add --claude --global` | Gradio core API + examples for ML demos / HF Spaces. Lands in `~/.agents/skills/gradio/`, symlinked into `~/.claude/skills/gradio/`; re-run with `--force` to update. Gradio is a **Python** CLI → run via **uv/uvx**, not bunx. |
+
+### 5. Optional behavior overlays — **evaluated, not RA-owned**
 
 General-purpose *behavior* skills (they change how the agent writes/talks, not RA domain
 knowledge). **Not vendored or owned here** — they live in their own maintained marketplaces; this

@@ -4,7 +4,7 @@
 // calling gsap.registerPlugin() in every component.
 //
 // GSAP — and every plugin — is 100% free since Webflow's acquisition of GreenSock.
-// Install from the public npm package: `npm i gsap`. No Club membership, no auth
+// Install the public `gsap` package: `bun add gsap`. No Club membership, no auth
 // token, no private registry / .npmrc required.
 import { browser } from '$app/environment';
 import { gsap } from 'gsap';
