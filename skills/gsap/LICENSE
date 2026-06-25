@@ -1,0 +1,40 @@
+MIT License
+
+Copyright (c) 2026 AI Riksarkivet
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+Attribution / third-party references
+
+This skill is original work written for the Riksarkivet rask platform. It is
+informed by, and credits, the following MIT-licensed projects; no substantial
+text was copied from them:
+
+  • GreenSock GSAP Skills — https://github.com/greensock/gsap-skills (MIT)
+    The official GSAP agent skills. GSAP itself is (c) GreenSock; the library
+    and all of its plugins are free, including for commercial use, following
+    Webflow's acquisition of GreenSock.
+
+  • svelte-gsap-template by YusufCeng1z (MIT) —
+    https://github.com/YusufCeng1z/svelte-gsap-template
+    Referenced for the SvelteKit 2 + Svelte 5 + GSAP + Lenis project structure.
+
+GSAP is a trademark of GreenSock, Inc. This skill is not affiliated with or
+endorsed by GreenSock.

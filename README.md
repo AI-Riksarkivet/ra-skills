@@ -60,7 +60,7 @@ above. For Zed's native agent, point it at the generated
 
 ra-skills holds **only shared, reusable skills** (language + toolchain): `writing-python`,
 `writing-typescript`, `fastapi`, `testing-python`, `python-infrastructure`, `otel`, `dagger`,
-`dockerfile`, `turborepo`, `shadcn-svelte`, `micro-frontends`, `playwright-cli`, `architecture-diagram`, `zensical-setup`, `zensical-authoring`.
+`dockerfile`, `turborepo`, `shadcn-svelte`, `micro-frontends`, `playwright-cli`, `architecture-diagram`, `gsap`, `zensical-setup`, `zensical-authoring`.
 
 **Project-specific skills live with their project, not here** — e.g. rask's `rask-*`
 architecture/pipeline/orchestrator skills are vendored in the rask repo's `.claude/skills/`, and
@@ -75,6 +75,7 @@ the shared marketplace.
 | `dagger` | Dagger modules/functions in Go for container builds and CI/CD as typed, composable pipelines. | [SKILL.md](skills/dagger/SKILL.md) |
 | `dockerfile` | Production dockerfiles — multi-stage discipline, BuildKit cache mounts, hadolint, the .docker build-context contract. | [SKILL.md](skills/dockerfile/SKILL.md) |
 | `fastapi` | FastAPI + Pydantic production patterns: async, dependency injection, repositories, services, tests. | [SKILL.md](skills/fastapi/SKILL.md) |
+| `gsap` | GSAP (GreenSock) animation for the SvelteKit frontend — biased to SvelteKit 2 + Svelte 5 (runes): tweens, timelines, ScrollTrigger (scroll reveals, parallax, pinning, scrub), and the now-free plugins (SplitText, Flip, Draggable, MorphSVG, ScrollSmoother). Svelte-first integration via the {@attach} pattern, gsap.context()/matchMedia() cleanup, SSR-safe setup, and Lenis smooth scroll, with copy-paste templates ($lib/gsap.ts, attachment factories, a golden-path component, a root +layout.svelte) and per-topic references. Original work; credits the official GreenSock gsap-skills (MIT). | [SKILL.md](skills/gsap/SKILL.md) |
 | `micro-frontends` | Composing one UI from independently deployed frontends owned by separate teams: build-time / zones / server-side / client-side-runtime composition, Module Federation, single-spa, web components, cross-app communication, and when-to-use tradeoffs. | [SKILL.md](skills/micro-frontends/SKILL.md) |
 | `otel` | OpenTelemetry for Python services — SDK setup, spans/metrics/logs, semantic conventions, the Collector pipeline. | [SKILL.md](skills/otel/SKILL.md) |
 | `playwright-cli` | Drive a browser + author Playwright tests from the terminal via playwright-cli (Playwright MCP): navigate/click/fill/snapshot/eval, test generation, request mocking, tracing, storage-state, video. Official skill from @playwright/cli (Apache-2.0, Microsoft). | [SKILL.md](skills/playwright-cli/SKILL.md) |
@@ -96,7 +97,7 @@ the shared marketplace.
 
 ### 1. RA-owned skills — **vendored here** (this repo)
 
-The 15 skills above. Repos consume them as a marketplace (`/plugin install <name>@ra-skills`),
+The 16 skills above. Repos consume them as a marketplace (`/plugin install <name>@ra-skills`),
 **not** by copying into `.claude/skills/` — that copy-vendoring is exactly what caused the drift
 this repo fixes.
 
