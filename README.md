@@ -206,6 +206,7 @@ drift (the same reason §1 vendors only RA-owned skills). Run them at bootstrap 
 | Skill | Source | Install (per-developer, user scope) | Notes |
 |---|---|---|---|
 | `gradio` | `gradio-app/gradio` (official) | `uvx --with "huggingface_hub>=1.4.0" gradio skills add --claude --global` | Gradio core API + examples for ML demos / HF Spaces. Lands in `~/.agents/skills/gradio/`, symlinked into `~/.claude/skills/gradio/`; re-run with `--force` to update. Gradio is a **Python** CLI → run via **uv/uvx**, not bunx. |
+| `pytorch` (set) | `meta-pytorch/skills` (official) | `bunx skills add meta-pytorch/skills` | PyTorch-dev skills — debugging `torch.compile` (graph breaks, guard/recompile failures), authoring operators, profiling, and issue triage. Installs the **whole `meta-pytorch/skills` set** via the agentskills `skills` CLI; re-run to refresh. JS/npm CLI → run via **bunx**, **not `npx`** (Bun-only toolchain — contrast Gradio above, which is Python/uvx). BSD-3-Clause. Relevant only for repos doing PyTorch / model-training work; add the install line to those repos' `make claude-bootstrap`. |
 
 ### 5. Optional behavior overlays — **evaluated, not RA-owned**
 
