@@ -188,6 +188,7 @@ this repo fixes.
 | `svelte-skills-kit` | `spences10/svelte-skills-kit` | `svelte-skills` | runes, SvelteKit data flow, components, deployment |
 | `huggingface-skills` | `huggingface/skills` | `hf-cli`, `huggingface-trackio` | rask pushes models/datasets to the HF Hub |
 | `claude-plugins-official` | `anthropics/claude-plugins-official` | `redis-development` | Redis skill (the `redis-development` plugin lives here, **not** a separate `redis` marketplace) |
+| `diagrid-labs` | `diagrid-labs/dapr-skills` | `dapr-skills` | Dapr Workflow skills — prereq checks, workflow scaffolding (Go/Python/.NET/Aspire, from BPMN/diagram), and review passes (determinism, activity idempotency, management API); matches rask's Dapr workflow usage |
 
 ### 3. MCP servers — **registered separately** (not plugins)
 
