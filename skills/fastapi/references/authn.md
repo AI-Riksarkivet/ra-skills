@@ -111,7 +111,7 @@ async def get_current_user(session: SessionDep, token: TokenDep) -> User:
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
 ```
 
-Login endpoint and timing-attack-resistant authentication live in `crud.py` (see project-template.md § Repository pattern).
+The login flow that issues these tokens is `UserService.authenticate` (see project-template.md § Service Layer) — it verifies via `verify_password` and persists the upgraded hash when one is returned.
 
 ## API keys (service-to-service)
 
@@ -249,16 +249,21 @@ async def verify_oidc_token(
     cache: _OIDCCache,
 ) -> IDToken:
     spec = await discover(issuer, cache)
-    keys = await jwks(spec["jwks_uri"], cache)
+    keys = await jwks(spec["jwks_uri"], cache)   # async fetch, TTL-cached above
     algorithms: list[str] = spec["id_token_signing_alg_values_supported"]
 
-    # PyJWT picks the right key from the JWKS via the kid header.
-    jwk_client = jwt.PyJWKClient(spec["jwks_uri"], cache_jwk_set=True, max_cached_keys=16)
-    signing_key = jwk_client.get_signing_key_from_jwt(token).key
+    # Select the key matching the token's `kid` header from the async-fetched JWKS.
+    # Don't use jwt.PyJWKClient here — its get_signing_key_from_jwt() does a
+    # SYNCHRONOUS urllib fetch, which blocks the event loop inside `async def`.
+    kid = jwt.get_unverified_header(token).get("kid")
+    try:
+        signing_key = jwt.PyJWKSet.from_dict(keys)[kid]
+    except KeyError as e:
+        raise jwt.InvalidTokenError(f"no JWKS key for kid={kid!r}") from e
 
     payload = jwt.decode(
         token,
-        signing_key,
+        signing_key.key,
         algorithms=algorithms,
         audience=audience,
         issuer=spec["issuer"],

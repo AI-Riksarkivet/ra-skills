@@ -129,25 +129,7 @@ Pick **outbox** when the event going missing causes data drift across services. 
 
 ## Trace context propagation
 
-OTel auto-instrumentation propagates W3C trace context across `httpx` calls automatically — the receiving service sees the same `trace_id`. For NATS, the SDK won't inject — do it manually with `propagate`:
-
-```python
-# producer
-from opentelemetry import propagate
-
-headers: dict[str, str] = {}
-propagate.inject(headers)
-await nats.publish("orders.created", payload, headers=headers)
-```
-
-```python
-# consumer
-ctx = propagate.extract(msg.headers or {})
-with tracer.start_as_current_span("orders.created.handler", context=ctx):
-    await handle(msg)
-```
-
-See `python-infrastructure` § observability for the full pattern. Without context propagation, distributed traces stop at every queue boundary.
+OTel auto-instrumentation propagates W3C trace context across `httpx` calls automatically — the receiving service sees the same `trace_id`. For NATS (or any queue), the SDK won't inject — do it manually with `propagate.inject`/`propagate.extract`; the code (plus baggage and span links) lives in the `otel` skill, `references/python-sdk.md` § Across non-HTTP boundaries. Without context propagation, distributed traces stop at every queue boundary.
 
 ## Service-to-service authn
 

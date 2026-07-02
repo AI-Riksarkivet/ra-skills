@@ -156,6 +156,7 @@ func (m *Myproject) ScanSarif(
     return dag.Container().
         From("aquasec/trivy:latest").
         WithMountedFile("/image.tar", tarFile).
+        WithExec([]string{"mkdir", "-p", "/output"}).
         WithExec([]string{
             "trivy", "image",
             "--input", "/image.tar",
@@ -178,9 +179,10 @@ func (m *Myproject) ExtractProvenanceAttestation(
     // +default="./provenance.intoto.jsonl"
     outputPath string,
 ) (*dagger.File, error) {
-    // Add docker.io prefix if needed
+    // Add docker.io prefix if the ref has no registry host
+    // (a registry host contains '.' or ':', e.g. "gcr.io/...", "localhost:5000/...")
     fullRef := imageRef
-    if !containsRegistry(imageRef) {
+    if first := strings.Split(imageRef, "/")[0]; !strings.ContainsAny(first, ".:") {
         fullRef = "docker.io/" + imageRef
     }
 
@@ -238,7 +240,11 @@ func (m *Myproject) VerifyTelemetry(
         WithExposedPort(16686).  // Jaeger UI / Query API
         AsService()
 
-    appContainer := m.buildDev(source).
+    appContainer, err := m.Build(ctx, source, "")
+    if err != nil {
+        return "", err
+    }
+    appContainer = appContainer.
         WithServiceBinding("jaeger", jaeger).
         WithEnvVariable("CACHE_BUST", time.Now().String()) // bust cache
 
@@ -249,13 +255,18 @@ func (m *Myproject) VerifyTelemetry(
     servicesOutput, err := appContainer.
         WithExec([]string{"sh", "-c", "wget -qO- 'http://jaeger:16686/api/services'"}).
         Stdout(ctx)
-    // ... validate traces exist
+    if err != nil {
+        return "", fmt.Errorf("failed to query Jaeger: %w", err)
+    }
+    if !strings.Contains(servicesOutput, "myapp") {
+        return "", fmt.Errorf("no traces found for service: %s", servicesOutput)
+    }
+    return servicesOutput, nil
 }
 ```
 
-Key gotcha: Don't set `OTEL_EXPORTER_OTLP_ENDPOINT` as a container env var
-when using `WithServiceBinding` — Dagger rewrites env vars containing service
-hostnames to tunnel addresses. Pass the endpoint directly in code instead.
+Key gotcha: don't set `OTEL_EXPORTER_OTLP_ENDPOINT` as a container env var
+here — see SKILL.md key rule 10 (Dagger rewrites service hostnames in env vars).
 
 ## GitHub Actions with signing and attestations
 
@@ -350,39 +361,5 @@ jobs:
         run: cosign sign --yes myorg/myapp@${{ steps.build.outputs.digest }}
 ```
 
-### Minimal CI workflow
-
-```yaml
-name: CI
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  ci:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Checks
-        uses: dagger/dagger-for-github@v8
-        with:
-          verb: call
-          args: checks
-          cloud-token: ${{ secrets.DAGGER_CLOUD_TOKEN }}
-          version: 'latest'
-      - name: Tests
-        uses: dagger/dagger-for-github@v8
-        with:
-          verb: call
-          args: test
-          cloud-token: ${{ secrets.DAGGER_CLOUD_TOKEN }}
-          version: 'latest'
-```
-
-Pin action SHAs in production for supply-chain security:
-
-```yaml
-uses: dagger/dagger-for-github@456fc3af63a2ba6f9789af9c55045b459115541b # v8.3.0
-uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-```
+Minimal (non-publish) CI workflow and the pin-action-SHAs rule: see
+[cli-reference.md § CI integration](cli-reference.md).

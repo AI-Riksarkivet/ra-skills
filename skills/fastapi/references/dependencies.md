@@ -2,51 +2,20 @@
 
 ## Contents
 
-- When to use dependencies
 - Dependencies with `yield` and `scope`
 - Sub-dependency chains
 - Per-request caching (and `use_cache=False`)
 - Class dependencies
 - Overriding dependencies in tests
 
-## When to use dependencies
-
-Use dependencies when:
-
-- They can't be declared in Pydantic validation and require additional logic
-- The logic depends on external resources or could block in any other way
-- Other dependencies need their results (it's a sub-dependency)
-- The logic can be shared by multiple endpoints to do things like error early, authentication, etc.
-- They need to handle cleanup (e.g., DB sessions, file handles), using dependencies with `yield`
-- Their logic needs input data from the request, like headers, query parameters, etc.
-
 ## Dependencies with `yield` and `scope`
 
 When using dependencies with `yield`, they can have a `scope` that defines when the exit code is run.
 
-Use the default scope `"request"` to run the exit code after the response is sent back.
+Use the default scope `"request"` to run the exit code after the response is sent back. The canonical example is the `get_db` / `SessionDep` session dependency — it yields the session, commits on success, rolls back on error, all under the default `"request"` scope. Its code lives in one place: `production-patterns.md` § Dependency injection from `app.state`.
 
 ```python
-from collections.abc import AsyncGenerator
-from typing import Annotated
-
-from fastapi import Depends, FastAPI, Request
-from sqlmodel.ext.asyncio.session import AsyncSession
-
-app = FastAPI()
-
-
-async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:
-    async with AsyncSession(request.app.state.db_engine, expire_on_commit=False) as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
-SessionDep = Annotated[AsyncSession, Depends(get_db)]
+from app.api.deps import SessionDep   # get_db: production-patterns.md § DI from app.state
 
 
 @app.get("/items/")

@@ -1,17 +1,14 @@
 ---
 name: dagger
 description: >
-  Write Dagger modules and functions in Go for container builds, CI/CD pipelines,
-  and workflow automation. Use when: dagger, dagger module, dagger function,
-  dagger call, dagger shell, dagger init, CI/CD pipeline as code, container build
-  with dagger, publish container image, dagger SDK, daggerverse, dagger toolchain,
-  dagger Go SDK, programmable CI, build-test-push pipeline, dagger.json,
-  dag.Container, dag.Directory, multi-stage container build, dagger cloud,
-  trivy scan, SBOM generation, vulnerability scanning, provenance attestation,
-  cosign signing, supply chain security, docker compose dagger, service binding,
-  dagger-for-github action, publish docker registry, publish pypi.
-  Also use when the user wants to replace shell scripts or YAML CI configs with
-  typed, composable Go code that runs identically locally and in CI.
+  Write Dagger modules and functions in Go — CI/CD pipelines and container
+  builds as typed, composable code that runs identically locally and in CI.
+  Use when the user mentions dagger (module, shell, Daggerverse, dagger.json,
+  Dagger Cloud) or code uses dag.* types (dag.Container, dag.Directory);
+  wants to replace shell scripts or YAML CI configs with Go pipeline code;
+  is building or publishing container images in a build-test-push pipeline
+  (Docker registry, PyPI); or needs pipeline supply-chain security — Trivy
+  vulnerability scans, SBOM generation, provenance attestation, cosign signing.
 ---
 
 # Dagger — Go SDK
@@ -66,14 +63,12 @@ myproject/
         └── dagger/           # generated SDK types
 ```
 
-Split functions across files by concern — they all share the same `package main`.
-Exported methods on the main struct become Dagger Functions. Unexported methods
-are private helpers (useful for shared logic like base containers).
+Exported methods on the main struct become Dagger Functions.
 
 Use Go doc comments for descriptions. Key pragmas for arguments:
 
 - `// +optional` — argument not required
-- `// +default "value"` — default value
+- `// +default="value"` — default value
 - `// +defaultPath="/"` — default to module root directory (for `*dagger.Directory`)
 
 ```go
@@ -109,10 +104,10 @@ func (m *Myproject) Build(
     // +optional
     src *dagger.Directory,
     // +optional
-    // +default "linux"
+    // +default="linux"
     os string,
     // +optional
-    // +default "amd64"
+    // +default="amd64"
     arch string,
 ) *dagger.File {
     return m.base(src).
@@ -133,7 +128,8 @@ CI/CD pipelines, caching, secrets, and services:
 → See [references/go-patterns.md](references/go-patterns.md)
 
 For vulnerability scanning (Trivy), SBOM generation, provenance extraction,
-and supply-chain security patterns:
+OpenTelemetry/telemetry verification (Jaeger), and supply-chain security
+patterns:
 → See [references/security-scanning.md](references/security-scanning.md)
 
 For CLI commands, Dagger Shell usage, and CI integration:
@@ -141,6 +137,10 @@ For CLI commands, Dagger Shell usage, and CI integration:
 
 For Go SDK docs, official documentation links, and Daggerverse:
 → See [references/docs-and-resources.md](references/docs-and-resources.md)
+
+Authoring the Dockerfile itself — conventions, digest-pinned base images,
+non-root user, OCI labels — is the `dockerfile` skill; this skill builds and
+publishes those images (default path `.docker/<name>.dockerfile`).
 
 ## Key rules
 
@@ -154,7 +154,10 @@ For Go SDK docs, official documentation links, and Daggerverse:
 4. **`+defaultPath="/"`** on `*dagger.Directory` params makes source default
    to the module root. Combine with `// +optional` so callers can override.
 5. **Run `dagger develop`** after changing dependencies or updating Dagger
-   version to regenerate bindings. Check the changelog for breaking changes.
+   version to regenerate bindings. When bumping `engineVersion`, scan the
+   release notes between the old and new versions
+   (https://github.com/dagger/dagger/releases) for API changes to methods
+   you use.
 6. **Cache mounts** — use `dag.CacheVolume("key")` with `WithMountedCache`
    for package manager caches (pip, go mod, npm). Persists across runs.
 7. **Secrets** — never hardcode. Accept `*dagger.Secret` as function argument
@@ -184,7 +187,10 @@ func (m *Myproject) Test(ctx context.Context, src *dagger.Directory) (string, er
 }
 ```
 
-For ad-hoc usage, search tips, and more:
+For ad-hoc usage without installing (`dagger -m <ref> call …`):
+→ See [references/cli-reference.md](references/cli-reference.md)
+
+For Daggerverse search tips:
 → See [references/docs-and-resources.md](references/docs-and-resources.md)
 
 ## Toolchains (no-code modules)
@@ -197,17 +203,6 @@ dagger toolchain install github.com/example/linter
 dagger toolchain install github.com/example/tester
 dagger call linter lint
 dagger call tester test
-```
-
-## Dagger Shell
-
-Interactive REPL for composing workflows:
-
-```
-$ dagger
-> container | from alpine | with-exec apk add curl | stdout
-> container | from alpine | terminal          # interactive debugging
-> container | from alpine | .help             # context-sensitive help
 ```
 
 ## Core types quick reference
@@ -229,38 +224,7 @@ $ dagger
 | Port          | `*dagger.Port`          | Port exposed by a container                                 |
 | Platform      | `dagger.Platform`       | Target platform string — e.g. `"linux/amd64"`               |
 
-### Key methods by type
-
-**Container** (most-used):
-`From`, `Build`, `WithExec`, `WithDirectory`, `WithMountedDirectory`,
-`WithFile`, `WithMountedFile`, `WithMountedCache`, `WithMountedSecret`,
-`WithEnvVariable`, `WithSecretVariable`, `WithWorkdir`, `WithEntrypoint`,
-`WithExposedPort`, `WithServiceBinding`, `WithRegistryAuth`,
-`WithPlatformVariants`, `Stdout`, `Stderr`, `File`, `Directory`,
-`Publish`, `Export`, `AsTarball`, `AsService`, `Terminal`, `Sync`
-
-**Directory**:
-`File`, `Entries`, `WithFile`, `WithFiles`, `WithDirectory`,
-`DockerBuild`, `Export`
-
-**File**:
-`Contents`, `Export`
-
-**Service**:
-`Endpoint`, `Hostname`, `Ports`, `Up`
-
-**Secret**:
-`Name`, `Plaintext`
-
-**CurrentModule**:
-`Source`, `Workdir`, `WorkdirFile`
-
-**GitRepository**:
-`Branch`, `Tag`, `Commit`, `Head`, `Ref`, `Tags`, `Branches`
-
-Every type has chainable methods. For the full method list on any type,
-use `.help` in Dagger Shell: `container | from alpine | .help`
-
+Every type has chainable methods.
 Option structs follow the pattern `<Type><Method>Opts`:
 `dagger.ContainerBuildOpts`, `dagger.ContainerWithExecOpts`,
 `dagger.ContainerWithDirectoryOpts`, `dagger.ContainerAsServiceOpts`, etc.

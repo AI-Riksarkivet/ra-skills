@@ -1,18 +1,6 @@
 # Dapr Workflows
 
-Durable, code-first workflows that survive pod crashes and resume at the last completed activity. Replaces the older DBOS-based workflow patterns. Uses the Dapr sidecar — every pod that runs workflows gets a Dapr container injected (see `fastapi/references/microservices.md` § Dapr + Kubernetes interplay for the deployment side).
-
-## Contents
-
-- When to use Dapr Workflow vs NATS JetStream
-- Install + boot
-- Workflows and activities
-- Retry policy on activities
-- Scheduling a workflow
-- Status and result
-- FastAPI integration
-- Critical rules — workflow determinism
-- Gotchas
+Durable, code-first workflows that survive pod crashes and resume at the last completed activity. Uses the Dapr sidecar — every pod that runs workflows gets a Dapr container injected.
 
 ## When to use Dapr Workflow vs NATS JetStream
 
@@ -104,27 +92,19 @@ Pick `max_number_of_attempts` so total elapsed wait stays under your business de
 
 ## Scheduling a workflow
 
-The client is independent of the runtime — you can schedule from any process that can reach the Dapr sidecar.
+The client is independent of the runtime — any process that can reach the Dapr sidecar can schedule. Build one `wf.DaprWorkflowClient()` per process; in a FastAPI app, build it in lifespan and reach it via `Depends` (see § FastAPI integration) — never at module import.
 
 ```python
-# api/routes/checkout.py
-import dapr.ext.workflow as wf
-
-from app.core.workflows import checkout_workflow
-
-
-client = wf.DaprWorkflowClient()
-
-
-async def start_checkout(order_id: str) -> str:
-    return client.schedule_new_workflow(
-        workflow=checkout_workflow,
-        input=order_id,
-        instance_id=f"checkout-{order_id}",   # OPTIONAL but recommended for idempotency
-    )
+instance_id = client.schedule_new_workflow(
+    workflow=checkout_workflow,
+    input=order_id,
+    instance_id=f"checkout-{order_id}",   # OPTIONAL but recommended for idempotency
+)
 ```
 
 Passing an explicit `instance_id` makes scheduling **idempotent** — a duplicate call with the same id returns the existing instance instead of starting a second one. Without it, every call starts a new workflow.
+
+`DaprWorkflowClient` is synchronous gRPC — every call blocks the event loop while it runs. For `schedule_new_workflow` / `get_workflow_state` that's one localhost round-trip, acceptable inside an async route. `wait_for_workflow_completion` blocks for the workflow's entire runtime — never call it directly from async code; run it via `asyncio.to_thread(...)` or poll `get_workflow_state` instead.
 
 ## Status and result
 
@@ -136,7 +116,7 @@ state.serialized_output  # JSON of the workflow's return value once COMPLETED
 state.failure_details    # error type, message, stack trace if FAILED
 ```
 
-For long-running workflows, expose `get_workflow_state` via a FastAPI route so clients can poll, or use `client.wait_for_workflow_completion(...)` for short ones.
+For long-running workflows, expose `get_workflow_state` via a FastAPI route so clients can poll; `client.wait_for_workflow_completion(...)` is for short workflows only, and blocks — see the note in § Scheduling a workflow.
 
 ## FastAPI integration
 
@@ -199,7 +179,7 @@ Workflow functions are **replayed** on every crash recovery. Anything non-determ
 | ❌ Inside a workflow function | ✅ Move it to an activity |
 | ----------------------------- | ------------------------- |
 | `datetime.now()` / `time.time()` | `yield ctx.call_activity(get_current_time)` — or use `ctx.current_utc_datetime` (replay-safe) |
-| `random.random()` / `uuid.uuid4()` | `ctx.new_uuid()` (replay-safe), or activity |
+| `random.random()` / `uuid.uuid4()` | Move to an activity, or derive a stable ID from `ctx.instance_id` |
 | `httpx.get(...)` | Activity |
 | `await session.execute(...)` (any DB call) | Activity |
 | `os.environ[...]` reads | Pass via input or activity |
@@ -210,7 +190,7 @@ The rule is mechanical: **if it touches the outside world or returns different v
 
 ## Gotchas
 
-- **Workflow runtime needs the sidecar.** Locally you need `dapr init` to run; in k8s the sidecar must be injected (see `fastapi/references/microservices.md`). Without the sidecar, `wfr.start()` will appear to succeed but no workflows execute.
+- **Workflow runtime needs the sidecar.** Locally you need `dapr init` to run; in k8s the sidecar must be injected (see Cross-skill boundaries below). Without the sidecar, `wfr.start()` will appear to succeed but no workflows execute.
 - **`wfr.start()` is non-blocking.** It spawns a background thread. Don't `await` it; do call `wfr.shutdown()` in lifespan teardown or it leaks.
 - **Workflow inputs must be JSON-serializable.** Pydantic `model_dump_json()` is fine; passing a SQLAlchemy row or a custom class fails opaquely.
 - **Activities run on the Dapr placement service's selection of a worker** — they may run on a different pod than the workflow. Don't assume the activity sees the same in-process state.

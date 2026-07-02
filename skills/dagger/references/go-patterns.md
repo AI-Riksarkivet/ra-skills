@@ -71,7 +71,7 @@ func (m *Myproject) Build(
     if baseImage == "" {
         baseImage = "python:3.13-alpine"
     }
-    return m.BuildLocal(ctx, source, DefaultImageRepo, baseImage, []string{}, DefaultRegistry)
+    return m.BuildLocal(ctx, source, baseImage, []string{}, DefaultRegistry)
 }
 ```
 
@@ -496,13 +496,8 @@ container.WithSecretVariable("UV_PUBLISH_PASSWORD", pypiToken)
 container.WithMountedSecret("/run/secrets/token", tokenSecret)
 ```
 
-From CLI:
-
-```bash
---token=env:MY_TOKEN          # from env var
---token=file:./secret.txt     # from file
---token=cmd:"vault read ..."  # from command
-```
+Secret sources on the CLI (`env:`, `file:`, `cmd:`): see cli-reference.md
+§ Passing arguments.
 
 ## Multi-platform builds
 
@@ -546,3 +541,8 @@ func (m *Myproject) BuildImage(src *dagger.Directory) *dagger.Container {
         WithEntrypoint([]string{"/app"})
 }
 ```
+
+The runtime-image examples here and in Multi-platform builds use floating
+tags (`:latest`) for brevity — upstream-generic, not production guidance.
+For production images the `dockerfile` skill's hard rules supersede these:
+digest-pinned `FROM` (`@sha256:<digest>`), non-root user, OCI labels.

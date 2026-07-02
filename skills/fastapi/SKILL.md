@@ -1,11 +1,11 @@
 ---
 name: fastapi
-description: FastAPI best practices, conventions, and production project templates. Use when writing or refactoring FastAPI APIs and Pydantic models, or when scaffolding a new FastAPI project with async patterns, dependency injection, repositories, services, auth, and tests.
+description: FastAPI best practices, conventions, and production project templates. Use when writing, reviewing, or refactoring FastAPI or Pydantic API code, when scaffolding a new FastAPI project, or when building any new Python HTTP/REST service (FastAPI is the house standard).
 ---
 
 # FastAPI
 
-FastAPI is the project standard for HTTP services — Pydantic v2 native, async-first, autogenerates OpenAPI from type hints, threadpool fallback for sync handlers. **Flask / Django / Starlette-direct aren't used here** — pick FastAPI for any new HTTP service unless you're writing a non-HTTP CLI (use `typer` instead, see `writing-python`).
+FastAPI is the project standard for HTTP services. **Flask / Django / Starlette-direct aren't used here** — pick FastAPI for any new HTTP service unless you're writing a non-HTTP CLI (use `typer` instead, see `writing-python`).
 
 Routing index. Each topic links to a reference with full patterns and code. New projects start at [`project-template.md`](references/project-template.md); day-to-day code-style rules live in [`core-conventions.md`](references/core-conventions.md).
 
@@ -23,7 +23,7 @@ Routing index. Each topic links to a reference with full patterns and code. New 
 | **Pagination** — offset / cursor / keyset, reusable `PaginationParams`, generic `Page[Item]` (PEP 695), filter+sort+pagination, index requirements, `MAX_OFFSET` | [`pagination.md`](references/pagination.md) |
 | **Caching** — `cache_aside` for service methods, mutation→invalidation, lifespan warming, why-not response-cache middleware | [`cache.md`](references/cache.md) |
 | **Redis (design choice + wiring hub)** — when to add Redis vs NATS/Postgres, shared `make_redis` + `RedisDep`, JWT `jti` revocation, single-process SSE pub/sub, distributed lock | [`redis.md`](references/redis.md) |
-| **Rate limiting** — `slowapi` per-route (not global middleware), Redis-backed via `app.state.redis`, key by `user_id` not IP; mandatory on `/login`, `/token`, `/forgot-password` | [`rate-limiting.md`](references/rate-limiting.md) |
+| **Rate limiting** — `slowapi` per-route (not global middleware), Redis-backed (slowapi opens its own sync client, not `app.state.redis`), key by `user_id` not IP; mandatory on `/login`, `/token`, `/forgot-password` | [`rate-limiting.md`](references/rate-limiting.md) |
 | **WebSockets** — authn BEFORE `accept()`, `ConnectionManager` on `app.state`, server-side heartbeat, NATS JetStream for horizontal scaling, manual OTel spans; prefer SSE for one-way push | [`websockets.md`](references/websockets.md) |
 | **File handling** — `FileResponse` (path-traversal guard), `StreamingResponse` for generated content, HTTP-range for video / resumable, `UploadFile` chunked reads, temp-file cleanup | [`file-handling.md`](references/file-handling.md) |
 | **Streaming** — JSON Lines, Server-Sent Events (`EventSourceResponse`, `ServerSentEvent`), byte streams | [`streaming.md`](references/streaming.md) |

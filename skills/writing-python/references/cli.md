@@ -145,15 +145,22 @@ if __name__ == "__main__":
 
 ## Output formats
 
+The `json` and `csv` branches are machine output — bare `print()` / `sys.stdout` is correct there (pipe-friendly, no styling). The human-facing `table` branch goes through Rich.
+
 ```python
 import csv
 import json
 import sys
 
+from rich.console import Console
+from rich.table import Table
+
+console = Console()
+
 def print_items(items: list[dict], format: str = "table") -> None:
     match format:
         case "json":
-            print(json.dumps(items, indent=2))
+            print(json.dumps(items, indent=2))  # machine output — bare print is right here
         case "csv":
             if not items:
                 return
@@ -164,14 +171,12 @@ def print_items(items: list[dict], format: str = "table") -> None:
             if not items:
                 return
             headers = list(items[0])
-            widths = [
-                max(len(h), max(len(str(item.get(h, ""))) for item in items))
-                for h in headers
-            ]
-            print("  ".join(h.ljust(w) for h, w in zip(headers, widths)))
-            print("  ".join("-" * w for w in widths))
+            table = Table()
+            for h in headers:
+                table.add_column(str(h))
             for item in items:
-                print("  ".join(str(item.get(h, "")).ljust(w) for h, w in zip(headers, widths)))
+                table.add_row(*(str(item.get(h, "")) for h in headers))
+            console.print(table)
 ```
 
 ## Progress display

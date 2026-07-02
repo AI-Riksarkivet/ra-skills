@@ -16,7 +16,6 @@ Annotations are enforced documentation. This project runs `ty check` in CI; unty
 - Callable types
 - Typed decorators (`**P`, `R`)
 - ty configuration
-- Summary
 
 ## Annotate every public signature
 
@@ -35,6 +34,8 @@ class UserRepository:
     async def find_by_id(self, user_id: str) -> User | None: ...
     async def save(self, user: User) -> User: ...
 ```
+
+Minimize `Any` — acceptable only for truly dynamic data or untyped third-party code.
 
 ## Union syntax
 
@@ -303,14 +304,3 @@ error-on-warning = true
 ```
 
 For incremental adoption on legacy code, use per-module overrides — see the `astral:ty` skill.
-
-## Summary
-
-1. Annotate **all public APIs** — params, returns, class attributes.
-2. Use **`T | None`** for optional types.
-3. **Run `ty check`** in CI.
-4. **Generics** via PEP 695 syntax (`class Foo[T]`, `def f[T: Bound](...)`, `def deco[**P, R](...)`). No `TypeVar` / `ParamSpec`.
-5. **Protocols** for structural typing — interfaces without inheritance.
-6. **Narrow with guards** (`if x is None: raise ...`) to help the checker.
-7. **Type aliases** via the `type` statement.
-8. **Minimize `Any`** — acceptable only for truly dynamic data or untyped third-party code.

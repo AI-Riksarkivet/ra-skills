@@ -149,19 +149,19 @@ the shared marketplace.
 | Name | Description | Documentation |
 |------|-------------|---------------|
 | `architecture-diagram` | Architecture diagrams for the rask platform as a single self-contained HTML file — interactive click-through flows (animated steps, mode toggles, side panel, drag) OR static export-ready topology snapshots with cloud/cluster/security-group/zone boundaries; both with built-in PNG/PDF/clipboard export. Biased to the RA stack: Ray, Argo Workflows, GitOps, Kubernetes, NATS JetStream, Dapr, Redis, FastAPI, SvelteKit, turborepo, micro-frontends, HF Hub, OpenTelemetry, the HTR pipeline. | [SKILL.md](skills/architecture-diagram/SKILL.md) |
-| `dagger` | Dagger modules/functions in Go for container builds and CI/CD as typed, composable pipelines. | [SKILL.md](skills/dagger/SKILL.md) |
+| `dagger` | Write Dagger modules and functions in Go — CI/CD pipelines and container builds as typed, composable code that runs identically locally and in CI. Use when the user mentions dagger (module, shell, Daggerverse, dagger.json, Dagger Cloud) or code uses dag.* types (dag.Container, dag.Directory); wants to replace shell scripts or YAML CI configs with Go pipeline code; is building or publishing container images in a build-test-push pipeline (Docker registry, PyPI); or needs pipeline supply-chain security — Trivy vulnerability scans, SBOM generation, provenance attestation, cosign signing. | [SKILL.md](skills/dagger/SKILL.md) |
 | `dockerfile` | Production dockerfiles — multi-stage discipline, BuildKit cache mounts, hadolint, the .docker build-context contract. | [SKILL.md](skills/dockerfile/SKILL.md) |
-| `fastapi` | FastAPI + Pydantic production patterns: async, dependency injection, repositories, services, tests. | [SKILL.md](skills/fastapi/SKILL.md) |
+| `fastapi` | FastAPI best practices, conventions, and production project templates. Use when writing, reviewing, or refactoring FastAPI or Pydantic API code, when scaffolding a new FastAPI project, or when building any new Python HTTP/REST service (FastAPI is the house standard). | [SKILL.md](skills/fastapi/SKILL.md) |
 | `gsap` | GSAP (GreenSock) animation for the SvelteKit frontend — biased to SvelteKit 2 + Svelte 5 (runes): tweens, timelines, ScrollTrigger (scroll reveals, parallax, pinning, scrub), and the now-free plugins (SplitText, Flip, Draggable, MorphSVG, ScrollSmoother). Svelte-first integration via the {@attach} pattern, gsap.context()/matchMedia() cleanup, SSR-safe setup, and Lenis smooth scroll, with copy-paste templates ($lib/gsap.ts, attachment factories, a golden-path component, a root +layout.svelte) and per-topic references. Original work; credits the official GreenSock gsap-skills (MIT). | [SKILL.md](skills/gsap/SKILL.md) |
 | `micro-frontends` | Composing one UI from independently deployed frontends owned by separate teams: build-time / zones / server-side / client-side-runtime composition, Module Federation, single-spa, web components, cross-app communication, and when-to-use tradeoffs. | [SKILL.md](skills/micro-frontends/SKILL.md) |
 | `otel` | OpenTelemetry for Python services — SDK setup, spans/metrics/logs, semantic conventions, the Collector pipeline. | [SKILL.md](skills/otel/SKILL.md) |
 | `playwright-cli` | Drive a browser + author Playwright tests from the terminal via playwright-cli (Playwright MCP): navigate/click/fill/snapshot/eval, test generation, request mocking, tracing, storage-state, video. Official skill from @playwright/cli (Apache-2.0, Microsoft). | [SKILL.md](skills/playwright-cli/SKILL.md) |
-| `python-infrastructure` | System-reliability Python: NATS JetStream jobs, Dapr workflows, tenacity retries, Redis cache, OTLP. | [SKILL.md](skills/python-infrastructure/SKILL.md) |
+| `python-infrastructure` | Python system-reliability patterns for this project's services. Use when queueing tasks or building async workers (NATS JetStream / nats-py), designing durable multi-step workflows that must survive crashes (Dapr Workflow / dapr-ext-workflow), handling transient failures with retries/backoff (tenacity) or circuit breakers, caching with Redis, or instrumenting services with OpenTelemetry traces/metrics/logs (OTLP). NOT FOR language idioms or type hygiene (use `writing-python`), HTTP routing (use `fastapi`), or deep OTel reference (use `otel`). | [SKILL.md](skills/python-infrastructure/SKILL.md) |
 | `shadcn-svelte` | shadcn-svelte components + CLI: add/update/fix components, composition, forms, icons, styling, components.json (official skill from huntabyte/shadcn-svelte). | [SKILL.md](skills/shadcn-svelte/SKILL.md) |
 | `svelte-flow` | Svelte Flow (@xyflow/svelte) node-based UI / flow-graph / diagram editors for the SvelteKit frontend — biased to SvelteKit 2 + Svelte 5 (runes): the <SvelteFlow /> component, custom nodes & edges, handles, Background/Controls/MiniMap/Panel, hooks (useSvelteFlow, useNodes/useEdges, useNodeConnections, useUpdateNodeInternals, …), edge-path utils (getBezierPath/getSmoothStepPath/getStraightPath), graph utils (addEdge, getIncomers/getOutgoers, getConnectedEdges), connection validation, reconnectable edges, sub-flows, theming, SSR, TypeScript generics, and external layouting (dagre/d3/elkjs). Encodes the Svelte 5 reality Claude gets wrong — nodes/edges are $state.raw and immutable, bind:nodes/edges, hooks return .current inside the flow context, import the stylesheet — with copy-paste SvelteKit templates and a reference per topic. API verified against @xyflow/svelte 1.6. | [SKILL.md](skills/svelte-flow/SKILL.md) |
 | `testing-python` | pytest for the rask suite — importlib import-mode, explicit testpaths, the slow marker, async + respx HTTP mocking. | [SKILL.md](skills/testing-python/SKILL.md) |
 | `turborepo` | Turborepo monorepo build system — turbo.json task pipelines, caching/remote cache, --filter/--affected, CI optimization, boundaries. | [SKILL.md](skills/turborepo/SKILL.md) |
-| `writing-python` | Idiomatic Python 3.14+ — type safety, Pydantic-first patterns, error handling, config, CLI. | [SKILL.md](skills/writing-python/SKILL.md) |
+| `writing-python` | Idiomatic Python 3.14+, Pydantic-first (not dataclasses), uv/ruff/ty toolchain. Use when writing or reviewing Python code — style, typing, design patterns, anti-patterns, error handling, resources, config, CLI, testing — or establishing project conventions. NOT for background jobs, retries, or observability (use `python-infrastructure`). | [SKILL.md](skills/writing-python/SKILL.md) |
 | `writing-typescript` | Idiomatic TypeScript for the SvelteKit frontend + component lib — strict typing, Result types, Bun/Vite/Vitest. | [SKILL.md](skills/writing-typescript/SKILL.md) |
 | `zensical-authoring` | Author Zensical docs: admonitions, superfences/mermaid, tabbed blocks, tasklists, grids, icons, front matter. | [SKILL.md](skills/zensical-authoring/SKILL.md) |
 | `zensical-setup` | Set up and configure Zensical (zensical.toml): palette, nav, theme features, mkdocstrings, GitHub Pages deploy. | [SKILL.md](skills/zensical-setup/SKILL.md) |
@@ -208,6 +208,7 @@ drift (the same reason §1 vendors only RA-owned skills). Run them at bootstrap 
 |---|---|---|---|
 | `gradio` | `gradio-app/gradio` (official) | `uvx --with "huggingface_hub>=1.4.0" gradio skills add --claude --global` | Gradio core API + examples for ML demos / HF Spaces. Lands in `~/.agents/skills/gradio/`, symlinked into `~/.claude/skills/gradio/`; re-run with `--force` to update. Gradio is a **Python** CLI → run via **uv/uvx**, not bunx. |
 | `pytorch` (set) | `meta-pytorch/skills` (official) | `bunx skills add meta-pytorch/skills` | PyTorch-dev skills — debugging `torch.compile` (graph breaks, guard/recompile failures), authoring operators, profiling, and issue triage. Installs the **whole `meta-pytorch/skills` set** via the agentskills `skills` CLI; re-run to refresh. JS/npm CLI → run via **bunx**, **not `npx`** (Bun-only toolchain — contrast Gradio above, which is Python/uvx). BSD-3-Clause. Relevant only for repos doing PyTorch / model-training work; add the install line to those repos' `make claude-bootstrap`. |
+| `mattpocock/skills` (pick per skill) | [`mattpocock/skills`](https://github.com/mattpocock/skills) (MIT) | `bunx skills@latest add mattpocock/skills` (per-skill picker) | Matt Pocock's process/workflow skill suite. **Not a marketplace** (single plugin, no `marketplace.json`), so there is no by-reference install — the agentskills `skills` CLI **copies** the picked skills into user scope; re-run to refresh. Recommended picks (2026-07 audit): [`writing-great-skills`](https://github.com/mattpocock/skills/tree/main/skills/productivity/writing-great-skills) — **our skill-authoring standard**, see [Contributing](#contributing) — plus per-developer trials of the standalone skills `diagnosing-bugs`, `tdd`, `grilling`, `prototype`, `handoff`, `codebase-design`, `resolving-merge-conflicts`. **Skip the interlocking glue** (`ask-matt`, `implement`, `to-issues`/`to-prd`, `grill-with-docs`, `setup-matt-pocock-skills`, `triage`) — each pulls his whole ecosystem plus repo conventions (`CONTEXT.md`, `docs/adr/`, issue-tracker labels) we don't run. |
 
 ### 5. Optional behavior overlays — **evaluated, not RA-owned**
 
@@ -231,6 +232,26 @@ table just records the team's evaluation so the decision isn't re-litigated.
 
 Hand-edit **only** `SKILL.md` files, `references/`, and `.claude-plugin/{marketplace.json,plugin.json}`.
 Everything else is generated.
+
+### Authoring standard: `writing-great-skills`
+
+Skills here are written and audited against Matt Pocock's
+[`writing-great-skills`](https://github.com/mattpocock/skills/blob/main/skills/productivity/writing-great-skills/SKILL.md)
+(MIT) and its [`GLOSSARY.md`](https://github.com/mattpocock/skills/blob/main/skills/productivity/writing-great-skills/GLOSSARY.md) —
+read both before adding or reworking a skill (install locally via the `mattpocock/skills` row in
+[§4](#4-vendor-cli-skills--self-installing-run-once-per-machine-self-updating)). The rules that bite most in this marketplace:
+
+- **The `description` is permanent context load** — it sits in the agent's window *every turn* of
+  every consuming session. Front-load the skill's trigger word, one trigger per genuinely distinct
+  branch, no synonym padding, and never restate identity that already lives in the body.
+- **Single source of truth** — each rule/gotcha/code sample gets exactly one home; every other
+  site is a one-line pointer. Duplicated copies drift into contradictions (the 2026-07 audit found
+  several that had).
+- **Progressive disclosure** — SKILL.md keeps only every-path material; branch-only reference goes
+  behind *condition-bearing* pointers ("Debugging a slow build → `references/caching.md`"), not
+  bare links. Step-less flat-reference skills are fine; an 800-line SKILL.md is not.
+- **Prune** no-ops (lines the model already does by default), sediment (stale notes), and
+  "Summary"/"When to use" blocks that restate the description or a reference.
 
 ```bash
 ./scripts/publish.sh          # regenerate agents/AGENTS.md + the README skills table

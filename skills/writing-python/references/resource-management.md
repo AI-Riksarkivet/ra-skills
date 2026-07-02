@@ -12,7 +12,6 @@ Release resources deterministically with context managers. Connections, file han
 - Efficient string accumulation
 - Stream metrics
 - Multiple resources with `ExitStack`
-- Summary
 - Gotchas
 
 ## Class-based context manager
@@ -276,21 +275,10 @@ async def process_connections(hosts: list[str]) -> list[dict]:
     return results
 ```
 
-## Summary
-
-1. **Always use context managers** for resources needing cleanup.
-2. **Clean up unconditionally** — `__exit__` runs even on exception.
-3. **Don't suppress exceptions unexpectedly** — return `False`/`None` unless suppression is intentional and documented.
-4. **`@contextmanager`** for simple patterns; class-based for stateful ones.
-5. **`ExitStack`** for a dynamic number of resources.
-6. **List + join**, not string concatenation, for accumulation.
-7. **Document exception suppression behavior** in the docstring.
-8. **Test cleanup paths** — verify resources are released on errors.
-
 ## Gotchas
 
 - **`with open()` inside a generator: file closes when the generator is GC'd, not at end of iteration** — fine in CPython (refcount), risky in PyPy.
-- **`ExitStack`: `enter_context` for the `__enter__`/`__exit__` protocol; `push` for cleanup-only callbacks** — mixing them with wrong ordering can swallow exceptions in the cleanup chain.
+- **`ExitStack`: `enter_context` for context managers; `callback(fn, *args)` for plain cleanup functions; `push` only for `__exit__`-style callables** (taking `exc_type, exc, tb`, optionally returning truthy to suppress). Passing a zero-arg cleanup function to `push` raises `TypeError` during unwinding — use `callback` for those.
 - **Async context managers MUST use `async with`** — `with` on an async manager silently returns a coroutine; no cleanup runs.
 - **`tempfile.NamedTemporaryFile` on Windows can't be reopened while open** — `delete=False` + explicit cleanup is the cross-platform path.
 - **`contextlib.suppress(BaseException)` swallows `KeyboardInterrupt`** — always pass concrete `Exception` subclasses.

@@ -1,6 +1,8 @@
 # Testing
 
-Tests use `pytest` + `pytest-asyncio` + `pytest-cov`. Coverage gate in CI; aim for 100% on new modules unless there's a written exception.
+Tests use `pytest` + `pytest-asyncio` + `pytest-cov`. Coverage gate in CI: 80% repo-wide (`--cov-fail-under=80`); aim for 100% on new modules unless there's a written exception.
+
+This file is pytest **technique**. Project **wiring** (pytest config in `pyproject.toml`, markers, fixture layout) is owned by the `testing-python` skill — don't add config from here.
 
 ## Contents
 
@@ -33,8 +35,6 @@ uv run pytest -v
 uv run pytest --cov=src
 uv run pytest --cov=src --cov-fail-under=80
 ```
-
-`uv run pytest` (not `uvx pytest`): pytest needs to import your package, so it has to run inside the project's venv, not an isolated tool environment.
 
 ## Basic tests
 
@@ -150,9 +150,11 @@ async def test_get_user(respx_mock):
 ### Side effects — callable / exception / iterable
 
 ```python
+import json
+
 # 1. Function side-effect — inspect the request, return a dynamic Response
 def _create_user(request: httpx.Request) -> httpx.Response:
-    payload = httpx.Request.read(request)
+    payload = json.loads(request.content)
     return httpx.Response(201, json={"id": 1, **payload})
 
 respx_mock.post("/users").mock(side_effect=_create_user)
@@ -225,12 +227,7 @@ async def test_with_async_fixture(async_client):
     assert result.status == 200
 ```
 
-In `pyproject.toml`, enable async mode globally:
-
-```toml
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-```
+Whether the `@pytest.mark.asyncio` marker is required per test or async mode is enabled globally (`asyncio_mode = "auto"`) is project wiring — in this repo async is explicit, not auto; see the `testing-python` skill before touching `pyproject.toml`.
 
 ## Test organization
 
@@ -280,6 +277,8 @@ def test_database_integration(db_session):
 uv run pytest -m integration
 uv run pytest -m "not integration"
 ```
+
+Marker names and registration are project wiring — this repo has **no `integration` marker**; see the `testing-python` skill for how integration tests are separated here. Keep the technique (isolate slow tests from the unit run), not this exact marker.
 
 ## Coverage
 
@@ -401,12 +400,6 @@ def test_cache_invalidation(): ...
 
 ## Guidelines
 
-- One concept per test (parametrize when shape repeats).
 - Descriptive test names — `test_<unit>_<scenario>_<expected_result>`.
 - Use fixtures for setup, not module-level state.
-- Keep tests independent — no order dependencies.
 - Test behavior, not implementation details.
-- Cover error paths AND boundary conditions, not just happy paths.
-- Mock at the boundary — prefer real DBs/queues for integration tests.
-- Fast (<100 ms) by default; integration tests live behind `pytest -m integration`.
-- Skipped tests need a written unblock condition or get deleted.

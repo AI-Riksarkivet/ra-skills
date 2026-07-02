@@ -2,7 +2,7 @@
 
 Lifespan, middleware, and the operational glue around a production FastAPI service.
 
-> Defers JSON serialization, blocking-call rules, and HTTP-verb design to the parent SKILL.md. This file is strictly about **what the app does on startup, every request, and shutdown**. Health endpoints live in [`health-checks.md`](health-checks.md); database pooling in [`database.md`](database.md); k8s deployment in [`kubernetes.md`](kubernetes.md).
+> Defers JSON serialization, blocking-call rules, and HTTP-verb design to [`core-conventions.md`](core-conventions.md) (§ Performance, § Async vs sync, § One HTTP operation per function). This file is strictly about **what the app does on startup, every request, and shutdown**. Health endpoints live in [`health-checks.md`](health-checks.md); database pooling in [`database.md`](database.md); k8s deployment in [`kubernetes.md`](kubernetes.md).
 
 ## Contents
 
@@ -70,7 +70,7 @@ This project's pattern is intentionally minimal because **uvicorn already does a
 ### What uvicorn does for free on `SIGTERM`
 
 1. Stop accepting new TCP connections.
-2. Let in-flight requests finish (up to `--timeout-graceful-shutdown`, default 30 s).
+2. Let in-flight requests finish — bounded by `--timeout-graceful-shutdown`, which is **unset by default** (uvicorn waits indefinitely; the k8s SIGKILL at `terminationGracePeriodSeconds` is the only backstop). Set it explicitly, below your grace period (e.g. `--timeout-graceful-shutdown 20` with the 40 s budget from [`kubernetes.md`](kubernetes.md)).
 3. Run your lifespan's post-`yield` block.
 4. Exit.
 
@@ -138,19 +138,7 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 ### How readiness participates
 
-The `/readyz` endpoint (see § Health checks) reads `app.state.startup_complete` and `app.state.shutting_down` — that's the entire "503 during shutdown" mechanism. No middleware required.
-
-```python
-# excerpt from api/health.py — see § Health checks for the full version
-@router.get("/readyz")
-async def readiness(request: Request) -> JSONResponse:
-    state = request.app.state
-    if not state.startup_complete:
-        return JSONResponse(503, content={"status": "starting"})
-    if state.shutting_down:
-        return JSONResponse(503, content={"status": "shutting_down"})
-    # ...component checks...
-```
+The `/readyz` endpoint reads `app.state.startup_complete` and `app.state.shutting_down` and returns 503 while either flag says "not ready" — that's the entire "503 during shutdown" mechanism. No middleware required. Full endpoint code in [`health-checks.md`](health-checks.md) § Endpoints.
 
 ### How k8s participates
 
@@ -254,37 +242,32 @@ FastAPI runs middleware in **reverse** of registration order on the way in, then
 
 ```
 register order:        execution per request:
-  1. CORS                CORS  ──┐  outermost
-  2. RequestID             RequestID ──┐
-  3. Timing                  Timing ──┐
-  4. Logging                   Logging ──┐
+  1. Logging             CORS  ──┐  outermost (registered LAST)
+  2. Timing                RequestID ──┐
+  3. RequestID               Timing ──┐
+  4. CORS                      Logging ──┐  innermost (registered first)
                                    Route handler
                                    (then unwinds in reverse)
 ```
 
-Recommended order (registered in this order):
-
-1. CORS
-2. Request ID
-3. Timing
-4. Logging
+Recommended **execution** order (outermost → innermost): CORS → Request ID → Timing → Logging — so RequestID has set `request.state.request_id` before Logging reads it, and short-circuited responses still get CORS headers. To get it, **register in reverse**: Logging first, CORS last.
 
 ```python
-# main.py
+# main.py — innermost registered first; the LAST add_middleware is outermost
 from fastapi.middleware.cors import CORSMiddleware
 from app.middleware import RequestIDMiddleware, TimingMiddleware, LoggingMiddleware
 
+app.add_middleware(LoggingMiddleware)     # innermost — sees request.state.request_id
+app.add_middleware(TimingMiddleware)
+app.add_middleware(RequestIDMiddleware)
 app.add_middleware(
-    CORSMiddleware,
+    CORSMiddleware,                       # outermost — wraps even short-circuited responses
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["*"],
     expose_headers=["X-Request-ID", "X-Response-Time"],
 )
-app.add_middleware(RequestIDMiddleware)
-app.add_middleware(TimingMiddleware)
-app.add_middleware(LoggingMiddleware)
 ```
 
 ### Request ID
@@ -445,16 +428,9 @@ See [`exception-handlers.md`](exception-handlers.md) — `DomainError` hierarchy
 
 ## Key decisions
 
+Only the decisions not already stated above (the rest live in their owning sections/files — lifespan, middleware order, health, error mapping here; k8s process model and shutdown budget in [`kubernetes.md`](kubernetes.md)):
+
 | Decision           | Recommendation                                                  |
 | ------------------ | --------------------------------------------------------------- |
-| Startup / shutdown | `@asynccontextmanager` lifespan, not `on_event`                 |
-| Resource location  | `app.state` (set in lifespan), accessed via DI                  |
-| Dependencies       | `Annotated[T, Depends(...)]` aliases                            |
 | Settings           | One `BaseSettings` per domain (`AuthConfig`, `DbConfig`, …)     |
-| Response class     | FastAPI default — don't reach for `ORJSONResponse`              |
-| Logging            | stdlib `logging` + OTel auto-instrumentation; no `structlog`    |
-| Middleware order   | CORS → Request ID → Timing → Logging                            |
-| Health             | Split `livez` (no deps) and `readyz` (deps)                     |
-| Error mapping      | Global `@app.exception_handler` for domain exceptions           |
-| Scaling on k8s     | One worker per pod; scale via `replicas`, not `--workers N`     |
-| Shutdown on k8s    | `preStop: sleep 5` + 30s `terminationGracePeriodSeconds`        |
+| Response class     | FastAPI default — don't reach for `ORJSONResponse` (see [`core-conventions.md`](core-conventions.md) § Performance) |

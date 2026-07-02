@@ -12,7 +12,6 @@ Validate inputs at boundaries, raise meaningful exceptions, preserve context, an
 - Exception chaining — preserve the cause
 - Batch processing with partial failures
 - Progress reporting for long operations
-- Summary
 - Gotchas
 
 ## Early input validation
@@ -268,22 +267,9 @@ def process_large_batch(
     return BatchResult(succeeded=succeeded, failed=failed)
 ```
 
-## Summary
-
-1. **Validate early** — at boundaries, before expensive work.
-2. **Use specific exceptions** — `ValueError`, `TypeError`, not bare `Exception`.
-3. **Include context** — what, why, how to fix.
-4. **Convert types at boundaries** — parse strings to enums/Pydantic models early.
-5. **Chain exceptions** — `raise X from e` to preserve debug info.
-6. **Handle partial failures** — `BatchResult[T]` for batches.
-7. **Use Pydantic** for any structured validation.
-8. **Document failure modes** in docstrings.
-9. **Test error paths** — happy-path-only tests miss the important bugs.
-
 ## Gotchas
 
 - **`raise X from None` suppresses the cause chain; `raise X` preserves `__context__`** — different stack traces. Use `from None` when the lower exception is noise.
 - **Bare `raise` inside `except` re-raises the original; `raise e` rebuilds the traceback** — only bare `raise` preserves the original location.
-- **`assert` is stripped by `python -O`** — runtime validation MUST use explicit `if + raise`.
 - **Exception groups need `except*`, not `except`** — `except ExceptionGroup` catches but doesn't unwrap; `except*` does selective sub-exception handling.
 - **`finally` runs even after `return`** and overrides the return value if it has its own `return` — accidentally returning from `finally` swallows exceptions.

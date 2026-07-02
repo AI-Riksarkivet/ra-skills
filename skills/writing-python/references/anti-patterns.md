@@ -188,9 +188,9 @@ def create_user(data: dict) -> User:
 
 These have dedicated references — going there avoids two-sources-of-truth drift:
 
-- **Resources** (unclosed files/connections, blocking calls inside `async def`): see `resource-management.md` and the "Async patterns" section of `patterns.md`. Rule of thumb: every resource through a `with` / `async with`; never `time.sleep` / `requests` inside `async def` — use `asyncio.sleep` / `httpx.AsyncClient`.
-- **Type safety** (missing hints, bare `list` / `dict`): see `type-safety.md`. Rule of thumb: annotate every public signature; parameterize every container (`list[User]`, not `list`).
-- **Testing** (happy-path-only, over-mocking): see `testing.md`. Rule of thumb: cover error and boundary cases (T5/T6); mock at external boundaries only — prefer real fakes/in-memory for internal collaborators.
+- **Resources** (unclosed files/connections, blocking calls inside `async def`): see `resource-management.md` and the "Async patterns" section of `patterns.md`.
+- **Type safety** (missing hints, bare `list` / `dict`): see `type-safety.md`.
+- **Testing** (happy-path-only, over-mocking): see `testing.md`.
 
 The Quick review checklist below still tracks these for fast review without jumping files.
 
@@ -391,8 +391,8 @@ Before finalizing code, verify:
 
 ## Top gotchas
 
-- **Mutable default arguments share state across calls** — `def f(x=[]):` reuses the same list. Use `x: list | None = None` and create inside.
+Mutable-default and `assert`-stripping gotchas live in `SKILL.md` § Top gotchas.
+
 - **Bare `except:` catches `KeyboardInterrupt`** — silently absorbs Ctrl+C in long-running loops. Always be specific.
 - **`is` vs `==` for cached small ints/strings** — `a is b` works for small ints (-5..256) and interned strings, fails unpredictably otherwise. Always `==` for value comparison.
-- **`assert` is stripped by `python -O`** — never use for runtime validation; only for code-internal invariants.
 - **`__slots__` breaks pickling, weakref, and multiple inheritance** unless declared exactly right.

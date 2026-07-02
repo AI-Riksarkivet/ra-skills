@@ -134,19 +134,6 @@ Use [OpenFGA](https://openfga.dev/) when permissions become **relational** ("ali
 - You have <5 roles and they don't compose.
 - You don't yet have anyone asking "why can / can't X access Y?".
 
-**Use when:**
-
-- Per-object permissions across many objects (documents, folders, projects, organizations).
-- Inherited permissions through relationships (folder → document, org → team → user).
-- Audit answers like "who can read this document?" / "what documents can this user read?".
-- Permissions sourced from multiple systems (some from your DB, some from an external directory).
-
-**Don't use when:**
-
-- A single `is_admin` flag does the job.
-- You have <5 roles and they don't compose.
-- You don't yet have anyone asking "why can/can't X access Y?".
-
 ## Model
 
 OpenFGA models live in `model.fga` (treat the file like a migration — see operational notes). Define types and relations:
@@ -213,7 +200,7 @@ Route-level dependency:
 ```python
 # api/fga_deps.py
 from typing import Annotated
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 
 from app.api.oidc_deps import OIDCUserDep
 from app.core.fga import check
@@ -224,8 +211,10 @@ def require_permission(relation: str, object_template: str):
     object_template uses `{}` for path params, e.g. "document:{document_id}".
     Returns a dependency that 403s when the OIDC user lacks the relation.
     """
-    async def dep(user: OIDCUserDep, **path_params: str) -> None:
-        obj = object_template.format(**path_params)
+    # NOTE: never take `**path_params` in the dep signature — FastAPI turns it
+    # into a required query parameter (422 on every call). Read request.path_params.
+    async def dep(request: Request, user: OIDCUserDep) -> None:
+        obj = object_template.format(**request.path_params)
         if not await check(user=user.sub, relation=relation, object=obj):
             raise HTTPException(status.HTTP_403_FORBIDDEN, "Forbidden")
     return dep

@@ -109,10 +109,10 @@ For the helper, mutation→invalidation rule, lifespan cache-warming, and the "w
 
 ## Use 2 — Rate limiting (`slowapi` storage backend)
 
-The second-most-common reason. Same `app.state.redis` becomes the `slowapi` storage URI so per-IP / per-user limits are shared across pods. Full setup in [`rate-limiting.md`](rate-limiting.md); the only thing worth restating here is **the wiring is one line**:
+The second-most-common reason. The same Redis instance backs `slowapi` storage so per-IP / per-user limits are shared across pods — but slowapi opens its **own sync redis-py client** from the URL; it does not reuse `app.state.redis`. Full setup (including the sync-only `redis://` URI caveat) in [`rate-limiting.md`](rate-limiting.md):
 
 ```python
-limiter.storage_uri = str(settings.REDIS_URL).replace("redis://", "async+redis://")
+limiter = make_limiter(storage_uri=str(settings.REDIS_URL))  # see rate-limiting.md § Setup
 ```
 
 Without Redis, `slowapi` falls back to in-process storage — fine for a single pod, wrong the moment you scale to 2.
@@ -198,29 +198,7 @@ async def stream_notifications(r: redis.Redis, *, user_id: UUID) -> AsyncGenerat
 
 ## Use 5 — Distributed lock for "at most one worker"
 
-Occasionally you need "only one pod runs the daily reconciliation job." Redis `SET key value NX PX` is the standard pattern:
-
-```python
-# core/redlock.py — simplified single-node lock (good enough for the daily-job case)
-import secrets
-import redis.asyncio as redis
-from contextlib import asynccontextmanager
-
-
-@asynccontextmanager
-async def lock(r: redis.Redis, *, name: str, ttl_ms: int = 60_000):
-    token = secrets.token_hex(16)
-    acquired = await r.set(f"lock:{name}", token, nx=True, px=ttl_ms)
-    if not acquired:
-        yield False
-        return
-    try:
-        yield True
-    finally:
-        # Only release if we still own the lock (Lua script for atomicity in real code).
-        if await r.get(f"lock:{name}") == token:
-            await r.delete(f"lock:{name}")
-```
+Occasionally you need "only one pod runs the daily reconciliation job." Redis `SET key value NX PX` with an owner token is the standard pattern. The complete, race-free implementation (owner token + Lua-scripted release) lives in `python-infrastructure` `references/caching.md` § Cache stampede protection (single-flight) — use that; don't re-derive it here. Usage:
 
 ```python
 async with lock(app.state.redis, name="daily-reconcile", ttl_ms=30 * 60 * 1000) as got:

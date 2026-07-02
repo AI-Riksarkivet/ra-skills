@@ -1,6 +1,6 @@
 # Code Style & Documentation
 
-Consistent style and clear documentation make codebases maintainable. This project uses `ruff` for lint+format and `ty` for type checking — both fast Astral tools, both replace older alternatives.
+This project uses `ruff` for lint+format and `ty` for type checking — both fast Astral tools, both replace older alternatives.
 
 ## Contents
 
@@ -10,7 +10,6 @@ Consistent style and clear documentation make codebases maintainable. This proje
 - Google-style docstrings
 - Comments — write few, write well (C1/C3/C5)
 - Line length and formatting
-- Summary
 
 ## Toolchain configuration
 
@@ -48,8 +47,6 @@ uvx ruff check --fix .
 uvx ruff format .
 uvx ty check
 ```
-
-`uvx` runs the tool in an isolated environment without installing into your project's venv — faster and keeps the venv clean. For tools that need your project (`pytest`, `fastapi`), use `uv run` instead.
 
 ## Naming conventions
 
@@ -321,15 +318,3 @@ error_message = (
     f"with body {response.text[:100]}"
 )
 ```
-
-## Summary
-
-1. **`ruff` for lint + format**, **`ty` for type checks** — no other style tools.
-2. **120-char lines.**
-3. **Descriptive names**, no abbreviations; **length matches scope** (short in tight loops, long for module-level).
-4. **Names describe side effects** — `get_` is pure, `create_`/`save_` is not.
-5. **Leading underscore (`_foo`) = private** — internal helpers, attributes, and module-level names that callers shouldn't touch.
-6. **Absolute imports**, grouped stdlib/third-party/local.
-7. **Google-style docstrings** on every public API.
-8. **Few comments, none redundant**, no metadata, no commented-out code.
-9. **Automate in CI** — `uvx ruff check`, `uvx ruff format --check`, `uvx ty check` on every commit.

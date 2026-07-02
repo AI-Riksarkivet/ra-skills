@@ -2,28 +2,7 @@
 
 Decouple long-running or unreliable work from request/response cycles. This project uses **NATS JetStream** (via `nats-py`) as the primary task queue.
 
-> **JetStream vs Dapr Workflow — pick the right tool.** JetStream gives you _message durability_: the message survives, handlers are idempotent, retry means redelivering the whole message. **Dapr Workflow** (`dapr-workflows.md`) gives you _workflow durability_: the function's execution state survives crashes; on resume it picks up at the last completed activity. Use JetStream for fanout/work-queue/event distribution. Reach for Dapr Workflow when one logical workflow has multiple non-idempotent steps and you can't safely re-run from step 1 (checkout: charge → reserve → ship → notify). Dapr Workflow requires a Dapr sidecar per pod (see `fastapi/references/microservices.md` § Dapr + Kubernetes).
-
-## Contents
-
-- Core concepts
-- Connecting (`nats-py`)
-- Stream + consumer setup (one-time, idempotent)
-- Return a job ID immediately
-- Make tasks idempotent
-- Job state management
-- Dead letter handling
-- Status polling endpoint (FastAPI)
-- Worker shape (asyncio pull consumer)
-- Push consumer (when you want NATS to drive)
-- Summary
-
-## Core concepts
-
-1. **Task queue pattern.** API accepts request, enqueues a job, returns immediately with a job ID. Workers process jobs asynchronously.
-2. **Idempotency.** Tasks may be retried on failure. Design for safe re-execution.
-3. **Job state machine.** Jobs transition through `pending → running → succeeded/failed`.
-4. **At-least-once delivery.** Most queues guarantee at-least-once. Code must handle duplicates.
+> JetStream retries by redelivering the whole message. A workflow with multiple non-idempotent steps that must resume at the last completed step instead belongs in Dapr Workflow — decision table in `dapr-workflows.md` § When to use Dapr Workflow vs NATS JetStream.
 
 ## Connecting (`nats-py`)
 
@@ -62,6 +41,8 @@ from nats.js.api import (
     RetentionPolicy, StorageType, AckPolicy, DeliverPolicy,
 )
 
+MAX_DELIVER = 5  # single constant — the worker's dead-letter check uses it too
+
 
 async def ensure_stream(js: JetStreamContext) -> None:
     await js.add_stream(StreamConfig(
@@ -78,7 +59,7 @@ async def ensure_stream(js: JetStreamContext) -> None:
         durable_name="export-processor",
         ack_policy=AckPolicy.EXPLICIT,
         ack_wait=60,                             # seconds
-        max_deliver=5,
+        max_deliver=MAX_DELIVER,
         max_ack_pending=100,
         filter_subject="exports.>",
         deliver_policy=DeliverPolicy.ALL,
@@ -153,7 +134,7 @@ async def start_export(
 
 ## Make tasks idempotent
 
-Workers may retry on crash or timeout. Design for safe re-execution.
+Delivery is at-least-once: workers may retry on crash or timeout, and duplicates happen. Design for safe re-execution.
 
 ```python
 async def process_order(order_id: str) -> None:
@@ -324,26 +305,34 @@ async def _handle(msg) -> None:
         result = await process_job(payload)
         await jobs_repo.update_status(job_id, JobStatus.SUCCEEDED, result=result)
         await msg.ack()
-    except RetryableError as e:
-        # Let JetStream redeliver per the consumer's ack_wait / max_deliver.
-        log.warning("job_retryable", extra={"job_id": job_id, "error": str(e)})
-        await msg.nak(delay=5)
     except ValueError as e:
         # Permanent failure (bad input) — never redeliver.
-        await jobs_repo.update_status(job_id, JobStatus.FAILED, error=f"ValueError: {e}")
-        await handle_failure(job_id=job_id, payload=payload, error=e, attempts=attempts)
-        await msg.term()
+        await _dead_letter(msg, job_id=job_id, payload=payload, error=e, attempts=attempts)
+    except RetryableError as e:
+        # Transient: let JetStream redeliver per ack_wait / max_deliver —
+        # but on the final delivery, dead-letter so the job doesn't vanish.
+        if attempts >= MAX_DELIVER:
+            await _dead_letter(msg, job_id=job_id, payload=payload, error=e, attempts=attempts)
+        else:
+            log.warning("job_retryable", extra={"job_id": job_id, "error": str(e)})
+            await msg.nak(delay=5)
     except Exception as e:
-        # Unknown failure. If we're at max_deliver, dead-letter; otherwise let it redeliver.
-        if attempts >= 5:
-            await jobs_repo.update_status(job_id, JobStatus.FAILED, error=f"{type(e).__name__}: {e}")
-            await handle_failure(job_id=job_id, payload=payload, error=e, attempts=attempts)
-            await msg.term()
+        # Unknown failure — same dead-letter check, exponential redelivery delay.
+        if attempts >= MAX_DELIVER:
+            await _dead_letter(msg, job_id=job_id, payload=payload, error=e, attempts=attempts)
         else:
             await msg.nak(delay=2 ** attempts)
+
+
+async def _dead_letter(msg, *, job_id: str, payload: dict, error: Exception, attempts: int) -> None:
+    await jobs_repo.update_status(job_id, JobStatus.FAILED, error=f"{type(error).__name__}: {error}")
+    await handle_failure(job_id=job_id, payload=payload, error=error, attempts=attempts)
+    await msg.term()
 ```
 
 For long-running work, call `msg.in_progress()` before each slow step to extend the `ack_wait` deadline so JetStream doesn't redeliver behind your back.
+
+Give every job a hard timeout: wrap `process_job` in `asyncio.wait_for` (or the `with_timeout` decorator from `resilience.md`) with a limit below the consumer's `ack_wait`, so a hung job fails and naks before JetStream redelivers alongside it.
 
 Wrap `process_job` with the resilience patterns in `resilience.md` (retries on transient errors only). Wrap with OTel spans per `observability.md`. Across queue boundaries, propagate trace context via message headers (also covered in `observability.md`).
 
@@ -368,16 +357,3 @@ sub = await js.subscribe(
     manual_ack=True,
 )
 ```
-
-## Summary
-
-1. **Return immediately** — don't block requests for long operations.
-2. **Persist job state** — enable polling and debugging.
-3. **Idempotent tasks** — safe to retry on any failure.
-4. **Use idempotency keys** for external service calls.
-5. **Set timeouts** — both soft and hard.
-6. **DLQ permanent failures** — separate stream/subject in JetStream.
-7. **Log transitions** — every state change.
-8. **Exponential backoff** for retries; never bare retry loops.
-9. **Don't retry permanent failures** — validation, auth, 4xx (except 429).
-10. **Propagate trace context** through message headers (see `observability.md`).

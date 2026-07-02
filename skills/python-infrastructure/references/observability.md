@@ -2,18 +2,6 @@
 
 This project uses **OpenTelemetry** (OTLP) for the three signals — traces, metrics, logs — exported to an OTel Collector that fans out to backends. Don't pull in `structlog`, Prometheus client libs, or ad-hoc tracing — OTel's stdlib-`logging` handler, metrics API, and tracer cover all three.
 
-## Contents
-
-- Where to look first
-- Required resource attributes
-- Logging — stdlib `logging`, not structlog
-- What to instrument
-- The four golden signals
-- Bounded cardinality
-- Trace context across queue boundaries
-- Cross-cutting decorator (timed + traced)
-- Summary
-
 ## Where to look first
 
 | If you need to…                                                                              | Read                                                  |
@@ -29,79 +17,44 @@ This file documents the **project-specific conventions** layered on top of the `
 
 Every service sets these on `Resource.create({...})` at startup:
 
-| Key                      | Value                                            | Source                   |
-| ------------------------ | ------------------------------------------------ | ------------------------ |
-| `service.name`           | The service name, e.g. `rask-api`, `rask-worker` | env: `OTEL_SERVICE_NAME` |
-| `service.version`        | App version                                      | env: `SERVICE_VERSION`   |
-| `deployment.environment` | `local` / `staging` / `production`               | env: `ENVIRONMENT`       |
+| Key                           | Value                                            | Source                   |
+| ----------------------------- | ------------------------------------------------ | ------------------------ |
+| `service.name`                | The service name, e.g. `rask-api`, `rask-worker` | env: `OTEL_SERVICE_NAME` |
+| `service.version`             | App version                                      | env: `SERVICE_VERSION`   |
+| `deployment.environment.name` | `local` / `staging` / `production`               | env: `ENVIRONMENT`       |
 
 Set via env or in code:
 
 ```bash
 export OTEL_SERVICE_NAME="rask-api"
-export OTEL_RESOURCE_ATTRIBUTES="service.version=1.2.3,deployment.environment=production"
+export OTEL_RESOURCE_ATTRIBUTES="service.version=1.2.3,deployment.environment.name=production"
 export OTEL_EXPORTER_OTLP_ENDPOINT="http://otel-collector:4317"
 export OTEL_TRACES_EXPORTER="otlp"
 export OTEL_METRICS_EXPORTER="otlp"
 export OTEL_LOGS_EXPORTER="otlp"
-export OTEL_TRACES_SAMPLER="parentbased_traceidratio"
-export OTEL_TRACES_SAMPLER_ARG="0.1"
 export OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED="true"
 ```
 
-Prefer the env-var route; only set things in code that can't be expressed in env.
+Prefer the env-var route; only set things in code that can't be expressed in env. Leave the sampler at its default (`AlwaysOn`) — sampling happens in the Collector, not the SDK (`otel` → `references/collector.md`).
 
 ## Logging — stdlib `logging`, not structlog
 
-Use stdlib `logging`. With `OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=true` (or the `LoggingInstrumentor`), records are emitted as OTel log records and carry the current trace/span IDs automatically.
+Stdlib `logging` with `OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED=true` (or the `LoggingInstrumentor`) emits records as OTel log records carrying the current trace/span IDs automatically. Pass structured fields via `extra=`:
 
 ```python
 import logging
 
 log = logging.getLogger(__name__)
 
-# Pass structured fields via `extra=`; they end up as log-record attributes
 log.info("order_processed", extra={"order_id": order.id, "amount": order.total})
-log.warning("rate_limit_approaching", extra={"current_rate": 950, "limit": 1000})
 log.error("payment_failed", extra={"order_id": order.id, "provider": "stripe"}, exc_info=True)
 ```
 
-**Log-level discipline:**
-
-| Level     | Use for                       | Examples                          |
-| --------- | ----------------------------- | --------------------------------- |
-| `DEBUG`   | Development diagnostics       | Variable values, internal state   |
-| `INFO`    | Request lifecycle, operations | Request start/end, job completion |
-| `WARNING` | Recoverable anomalies         | Retry attempts, fallback used     |
-| `ERROR`   | Failures needing attention    | Exceptions, service unavailable   |
-
-Never log expected behavior at `ERROR`. A user typing the wrong password is `INFO`, not `ERROR`.
+Severity discipline (what belongs at each level): `otel` → `references/signals.md` § Severity.
 
 ## What to instrument
 
-**Auto-instrument** what you can — `opentelemetry-bootstrap -a install`, then run with `opentelemetry-instrument`. This covers FastAPI, httpx, asyncpg, redis, requests, and most other libs we use, for free.
-
-**Manually add spans** for business operations the auto-instrumentation can't see:
-
-```python
-from opentelemetry import trace
-
-tracer = trace.get_tracer(__name__)
-
-async def process_order(order_id: str) -> Order:
-    with tracer.start_as_current_span("process_order") as span:
-        span.set_attribute("order.id", order_id)
-
-        with tracer.start_as_current_span("validate_order"):
-            await validate_order(order_id)
-
-        with tracer.start_as_current_span("charge_payment"):
-            await charge_payment(order_id)
-
-        return await load_order(order_id)
-```
-
-See the `otel` skill for span events, exception recording, semantic-convention attributes, and the full API.
+**Auto-instrument first** — `opentelemetry-bootstrap -a install`, then run with `opentelemetry-instrument` (covered libraries and setup: `otel` → `references/python-sdk.md`). Manually add spans only for business operations the auto-instrumentation can't see (`process_order`, not every helper); span naming, kinds, and the full API: `otel` → `references/signals.md`.
 
 ## The four golden signals
 
@@ -132,37 +85,11 @@ Use **semantic-convention names** wherever they exist. See `otel` → `reference
 
 ## Bounded cardinality
 
-Never use unbounded values as metric attributes — user IDs, request IDs, raw paths with IDs.
-
-```python
-# BAD: explodes label cardinality
-request_counter.add(1, {"http.method": "GET", "user.id": user.id})
-
-# GOOD: bounded values only
-request_counter.add(1, {"http.method": "GET", "http.route": "/users/{id}", "http.status_code": 200})
-```
-
-Per-user details belong in spans/logs (where they're indexed but not multiplied), not in metric labels.
+Metric attributes must be bounded — per-user/per-request detail (user IDs, request IDs, raw paths with IDs) belongs on spans and logs, never on metric labels. Details and examples: `otel` → `references/signals.md` § Cardinality.
 
 ## Trace context across queue boundaries
 
-Publishing to NATS JetStream (or any queue) loses the current trace unless you propagate it explicitly via message headers:
-
-```python
-from opentelemetry import propagate
-
-# Publisher
-carrier: dict[str, str] = {}
-propagate.inject(carrier)  # writes traceparent + tracestate keys
-await js.publish(subject, payload, headers=carrier)
-
-# Consumer
-ctx = propagate.extract(dict(msg.headers or {}))
-with tracer.start_as_current_span("process_message", context=ctx):
-    await handle(msg)
-```
-
-See the `otel` skill for the full propagation API and additional propagators (W3C Baggage, etc.).
+Publishing to NATS JetStream (or any queue) loses the current trace unless you propagate it explicitly: `propagate.inject(...)` into the message headers on publish, `propagate.extract(...)` in the consumer before opening the processing span. Mechanism, code, and extras (baggage, span links): `otel` → `references/python-sdk.md` § Across non-HTTP boundaries.
 
 ## Cross-cutting decorator (timed + traced)
 
@@ -185,12 +112,14 @@ def timed_operation(name: str, **attrs):
         try:
             yield span
         except Exception as e:
-            span.record_exception(e)
-            span.set_status(trace.Status(trace.StatusCode.ERROR, str(e)))
+            # No span.record_exception() — deprecated. Status + log record instead
+            # (otel skill → references/signals.md § Exceptions).
+            span.set_status(trace.Status(trace.StatusCode.ERROR, f"{type(e).__name__}: {e}"))
             elapsed_ms = (time.perf_counter() - start) * 1000
             log.error(
                 "operation_failed",
-                extra={"operation": name, "duration_ms": round(elapsed_ms, 2), "error": str(e), **attrs},
+                extra={"operation": name, "duration_ms": round(elapsed_ms, 2), **attrs},
+                exc_info=True,
             )
             raise
         else:
@@ -204,17 +133,3 @@ def timed_operation(name: str, **attrs):
 with timed_operation("fetch_user_orders", user_id=user.id):
     orders = await order_repository.get_by_user(user.id)
 ```
-
-## Summary
-
-1. **OTel for all three signals** — traces, metrics, logs over OTLP.
-2. **Set `service.name`, `service.version`, `deployment.environment`** on the Resource.
-3. **stdlib `logging` + auto-instrumented LoggingInstrumentor** — don't add `structlog`.
-4. **Auto-instrument by default**; add manual spans only for business operations.
-5. **Four golden signals** at every external boundary.
-6. **Bounded cardinality** on metric attributes; per-request detail goes on spans/logs.
-7. **Propagate trace context across queue boundaries** explicitly.
-8. **Use semantic-convention attribute names** — see `otel` → `references/attributes.md`.
-9. **Sampling configured via env vars** (`OTEL_TRACES_SAMPLER`).
-
-For everything else OTel-related, defer to the `otel` skill.

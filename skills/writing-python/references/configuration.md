@@ -1,6 +1,6 @@
 # Configuration
 
-Externalize configuration from code with environment variables, parsed into typed `pydantic-settings` objects at startup. Fail fast on missing required values.
+Externalize configuration from code with environment variables, parsed into typed `pydantic-settings` objects at startup. Fail fast on missing required values. Document required env vars in the README.
 
 ## Contents
 
@@ -13,7 +13,6 @@ Externalize configuration from code with environment variables, parsed into type
 - Nested configuration groups
 - Secrets from files (containers)
 - Custom cross-field validation
-- Summary
 - Gotchas
 
 ## Typed settings with Pydantic
@@ -63,6 +62,8 @@ from myapp.config import settings
 def get_database_connection():
     return connect(host=settings.db_host, port=settings.db_port, database=settings.db_name)
 ```
+
+**Group settings per domain as they grow.** One flat app-wide `Settings` mixing every domain (as above) is fine for a handful of vars, but in service code it becomes an anti-pattern — every domain reads every var. Nest domain groups (see § Nested configuration groups) or define one `BaseSettings` per domain; the `fastapi` skill's anti-patterns reference calls this out explicitly.
 
 ## Fail fast at startup
 
@@ -265,21 +266,9 @@ class Settings(BaseSettings):
         return self
 ```
 
-## Summary
-
-1. **Never hardcode config** — all environment-specific values from env vars.
-2. **Use `pydantic-settings`** with validation.
-3. **Fail fast** on missing required config at startup.
-4. **Sensible local defaults**; explicit values required for secrets.
-5. **Never commit secrets** — `.env` (gitignored) or secret managers.
-6. **Namespace env vars** for clarity (`DB_HOST`, `REDIS_URL`).
-7. **Import a singleton** — don't `os.getenv` throughout the codebase.
-8. **Document required env vars** in the README.
-9. **Use `secrets_dir`** for container secret mounts.
-
 ## Gotchas
 
 - **`pydantic-settings` reads env at instantiation, not import** — but tests that monkeypatch env _after_ instantiating see cached values. Instantiate after patching, or build a new `Settings()` in the test.
 - **Nested `BaseSettings` need `env_nested_delimiter` explicitly set** — without it, `DB__HOST` won't auto-bind to `Settings.db.host`.
-- **`SecretStr` redacts in `__repr__` but NOT in `__str__`** — `print(secret)` leaks; `f"{secret}"` leaks; only `repr(secret)` and `secret.get_secret_value()` are explicit.
+- **`SecretStr` redacts in both `str()` and `repr()`** — `print(secret)` and f-strings show `**********`; the raw value is only exposed via `secret.get_secret_value()`. The real trap is the reverse: forgetting `.get_secret_value()` when building a connection string (you get `**********` in the DSN), or writing a custom serializer that dumps the raw value.
 - **`.env` file precedence vs process env**: pydantic-settings reads `.env` first then overlays process env. A CI secret wins over a developer's `.env` — but stale `.env` values stick if process env is missing the key.

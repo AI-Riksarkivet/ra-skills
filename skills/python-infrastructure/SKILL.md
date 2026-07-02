@@ -1,6 +1,6 @@
 ---
 name: python-infrastructure
-description: Python patterns for system reliability — background jobs and task queues (NATS JetStream via nats-py), durable multi-step workflows (Dapr Workflow via dapr-ext-workflow), resilience and recovery (retries, backoff, timeouts, circuit breakers via tenacity), caching (Redis), and observability (OpenTelemetry traces, metrics, logs via OTLP). USE WHEN building async workers, queueing tasks, designing fault-tolerant multi-step workflows that must survive crashes, handling transient network/IO failures, instrumenting Python services for production, designing retry policies, configuring tracing/metrics, or caching with Redis. NOT FOR language idioms or type hygiene (use `writing-python`), HTTP routing (use `fastapi`), or deep OTel reference (use `otel`).
+description: Python system-reliability patterns for this project's services. Use when queueing tasks or building async workers (NATS JetStream / nats-py), designing durable multi-step workflows that must survive crashes (Dapr Workflow / dapr-ext-workflow), handling transient failures with retries/backoff (tenacity) or circuit breakers, caching with Redis, or instrumenting services with OpenTelemetry traces/metrics/logs (OTLP). NOT FOR language idioms or type hygiene (use `writing-python`), HTTP routing (use `fastapi`), or deep OTel reference (use `otel`).
 ---
 
 # Python Infrastructure
@@ -12,7 +12,7 @@ System-reliability concerns for Python services in this project, grouped because
 | Concern                      | Tool                               | Notes                                                                                                                                                         |
 | ---------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Message bus / task queue     | **NATS JetStream** (via `nats-py`) | Durable streams, consumer groups, replay. Replaces Celery/RabbitMQ here.                                                                                      |
-| Durable multi-step workflows | **Dapr Workflow** (via `dapr-ext-workflow`) | Activity-level checkpointing via the Dapr sidecar. Use only when a workflow has multiple non-idempotent steps and JetStream's "redeliver the whole message" model isn't enough. Requires a Dapr sidecar per pod (see `fastapi/references/microservices.md` § Dapr + Kubernetes). |
+| Durable multi-step workflows | **Dapr Workflow** (via `dapr-ext-workflow`) | Activity-level checkpointing via the Dapr sidecar (one per pod). When vs JetStream: `references/dapr-workflows.md` § When to use. |
 | HTTP                         | **FastAPI**                        | See sibling `fastapi` skill.                                                                                                                                  |
 | Cache                        | **Redis**                          | `redis.asyncio` for async workers.                                                                                                                            |
 | Retries / backoff            | **tenacity**                       | Exponential + jitter, by default.                                                                                                                             |
@@ -24,34 +24,13 @@ System-reliability concerns for Python services in this project, grouped because
 
 | If you need to…                                                                                                 | Read                              |
 | --------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| Queue a task, design a worker, persist job state, retry/DLQ patterns (NATS JetStream + `nats-py`)               | `references/background-jobs.md`   |
-| Survive crashes mid-workflow with activity-level recovery (Dapr Workflow — workflows, activities, retry policies, scheduling)        | `references/dapr-workflows.md`    |
-| Decide what to retry, with what backoff, when to stop, circuit-breakers                                         | `references/resilience.md`        |
-| Instrument a service with OTel traces/metrics/logs, four golden signals                                         | `references/observability.md`     |
-| Use Redis as a cache (TTL, invalidation, async client patterns)                                                 | `references/caching.md`           |
+| Handle an operation that can fail transiently (network/IO/3rd-party API) — what to retry, with what backoff, when to stop, circuit-breakers | `references/resilience.md`        |
+| Run work out-of-request as a single idempotent action or fanout/event distribution — queue a task, design a worker, persist job state, retry/DLQ patterns (NATS JetStream + `nats-py`) | `references/background-jobs.md`   |
+| Run a multi-step workflow where re-running step 1 on crash is bad — activity-level recovery, retry policies, scheduling (Dapr Workflow, sidecar required) | `references/dapr-workflows.md`    |
+| Know what's happening in production — instrument a service with OTel traces/metrics/logs, four golden signals   | `references/observability.md`     |
+| Avoid repeated expensive lookups — Redis as a cache (TTL, invalidation) or short-lived coordination (rate limits, dedup windows, single-flight locks) | `references/caching.md`           |
 
-## Decision tree
-
-```
-Operation can fail transiently (network/IO/3rd-party API)?
-  -> resilience.md (retry policy)
-
-Operation runs out-of-request (email, image processing, batch)?
-  Is the work a single idempotent action? Or fanout/event distribution?
-    -> background-jobs.md (NATS JetStream)
-  Is it a multi-step workflow where re-running step 1 on crash is bad
-  (charge -> reserve -> ship -> notify)?
-    -> dapr-workflows.md (Dapr Workflow — sidecar required)
-
-Need to know what's happening in production?
-  -> observability.md (OTel)
-
-Need to avoid repeated expensive lookups?
-  -> caching.md (Redis)
-
-All five at once for one feature?
-  -> instrument first, then queue / workflow + retry + cache.
-```
+JetStream vs Dapr Workflow in depth: `references/dapr-workflows.md` § When to use. All five at once for one feature? Instrument first, then queue / workflow + retry + cache.
 
 ## Cross-skill boundaries
 
@@ -63,9 +42,9 @@ All five at once for one feature?
 
 ## Top gotchas
 
-- **Retry without backoff is a DoS amplifier.** A failed downstream + immediate retry from N clients = traffic burst that keeps the downstream down. Default to exponential backoff + jitter from day one.
-- **Retrying non-idempotent operations duplicates side effects.** A failed POST + retry can mean two charges. Always pair retry with an idempotency key OR mark the operation non-retryable.
-- **Synchronous code inside an async worker blocks the event loop.** A "fast" `requests` call in an asyncio worker kills throughput. Use `httpx.AsyncClient` or run sync code in an executor.
-- **Logs and metrics serve different audiences.** Logs answer "what happened to this one request"; metrics answer "what's happening across all requests". Don't try to derive one from the other — instrument both.
-- **Trace context propagation needs explicit plumbing across queue boundaries.** Publishing to JetStream loses the current trace unless you serialize trace context into message headers and restore it in the consumer. The OTel propagation API (`inject`/`extract`) is the supported path.
-- **Redis cache stampede** — N clients miss the same key simultaneously and all recompute. Use single-flight locks or `SETNX`-based mutexes for hot keys.
+- **Retry without backoff is a DoS amplifier** — default to exponential backoff + jitter from day one (`references/resilience.md`).
+- **Retrying non-idempotent operations duplicates side effects** — pair retry with an idempotency key OR mark the operation non-retryable (`references/background-jobs.md` § Make tasks idempotent).
+- **Synchronous code inside an async worker blocks the event loop** — use `httpx.AsyncClient`, or run sync code in an executor.
+- **Logs and metrics serve different audiences** — don't try to derive one from the other; instrument both.
+- **Trace context is lost across queue boundaries** unless you `inject`/`extract` it via message headers (`references/observability.md` § Trace context across queue boundaries).
+- **Redis cache stampede** — N clients miss a hot key simultaneously and all recompute; use single-flight locks (`references/caching.md` § Cache stampede protection).

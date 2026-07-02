@@ -6,6 +6,7 @@ What you actually need to deploy a FastAPI service to k8s. The lifespan handles 
 
 ## Contents
 
+- Process model — one worker per pod, never gunicorn
 - Shutdown sequence — what k8s actually does
 - Full Deployment YAML — probes, resources, lifecycle, preStop
 - Service

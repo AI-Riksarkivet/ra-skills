@@ -1,11 +1,11 @@
 # Rate Limiting
 
-What to put on `/login`, `/token`, `/forgot-password`, and any expensive route. Use **`slowapi`** with the **`app.state.redis`** client built in [`cache.md`](cache.md) — never a global middleware, never write your own algorithm.
+What to put on `/login`, `/token`, `/forgot-password`, and any expensive route. Use **`slowapi`** backed by Redis (slowapi opens its own sync client — see § Setup) — never a global middleware, never write your own algorithm.
 
 ## Contents
 
 - Choosing `slowapi`
-- Setup — Redis-backed limiter on `app.state`
+- Setup — module-level limiter, Redis storage
 - Per-route limits
 - Per-router shared limits
 - Keying — IP, user, API key
@@ -31,48 +31,36 @@ uv add slowapi redis
 
 slowapi 0.x uses the **synchronous** `redis-py` client for its storage backend, not async — its internal strategies (`FixedWindowRateLimiter` etc.) are sync-only. The blocking rate-limit check is ~1 ms (one `INCR + EXPIRE`) and FastAPI handles it in the threadpool, so it's not a meaningful event-loop hazard. Don't use `async+redis://` URIs with slowapi 0.x — it fails at construction with `AssertionError` because the sync strategies reject async storage.
 
-## Setup — Redis-backed limiter on `app.state`
+## Setup — module-level limiter, Redis storage
 
 slowapi opens its own (sync) redis-py connection, separate from your `app.state.redis` async client. They share the broker (one Redis cluster); the keys live alongside your cache keys under a `LIMITER/` prefix that slowapi sets automatically.
+
+The limiter must be **module-level** — `@limiter.limit(...)` decorators are evaluated at import time, so a limiter built inside lifespan can't back them. Assign the same instance to `app.state.limiter`: slowapi's 429 handler and header injection read that exact attribute.
 
 ```python
 # core/rate_limit.py
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from app.core.config import settings
 
-def make_limiter(redis_url: str) -> Limiter:
+
+def make_limiter(storage_uri: str) -> Limiter:
     # redis://... — sync backend; slowapi 0.x does NOT support async+redis://
-    return Limiter(key_func=get_remote_address, storage_uri=redis_url)
+    return Limiter(key_func=get_remote_address, storage_uri=storage_uri)
+
+
+limiter = make_limiter(storage_uri=str(settings.REDIS_URL))
 ```
 
 ```python
-# main.py — lifespan
-from slowapi.errors import RateLimitExceeded
+# main.py
+from app.core.rate_limit import limiter
 
-from app.core.rate_limit import make_limiter
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # ... db, http, redis ...
-    app.state.limiter = make_limiter(str(settings.REDIS_URL))
-    yield
+app.state.limiter = limiter   # slowapi's 429 handler / header injection read this
 ```
 
-```python
-# api/deps.py — expose limiter as a dep (so tests can override it)
-from typing import Annotated
-from fastapi import Depends, Request
-from slowapi import Limiter
-
-
-def get_limiter(request: Request) -> Limiter:
-    return request.app.state.limiter
-
-
-LimiterDep = Annotated[Limiter, Depends(get_limiter)]
-```
+Register the `RateLimitExceeded` handler too — see § Custom 429 response. In tests, disable limiting with `limiter.enabled = False` on the module-level instance (flip it back in teardown).
 
 ## Per-route limits
 
@@ -81,9 +69,8 @@ The single most useful pattern — apply to auth routes and expensive operations
 ```python
 # api/routes/auth.py
 from fastapi import APIRouter, Request
-from slowapi import Limiter
 
-from app.api.deps import limiter  # imported from app.state via dep
+from app.core.rate_limit import limiter
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -106,26 +93,30 @@ Rate-limit strings: `"5/minute"`, `"100/hour"`, `"10/second"`. See [`limits` doc
 
 ## Per-router shared limits
 
-When every route in a router needs the same baseline:
+When every route in a router should draw from one quota, use `limiter.shared_limit` — decorators with the same `scope` share a single counter:
 
 ```python
-# api/routes/expensive.py — all routes share one quota
-router = APIRouter(
-    prefix="/exports",
-    tags=["exports"],
-    dependencies=[Depends(RateLimitDep)],  # see below
-)
+# api/routes/expensive.py — all routes share one 20/hour bucket, keyed by user not IP
+from fastapi import APIRouter, Request
+
+from app.core.rate_limit import by_user, limiter   # by_user: § Keying below
+
+router = APIRouter(prefix="/exports", tags=["exports"])
+
+
+@router.post("/csv")
+@limiter.shared_limit("20/hour", scope="exports", key_func=by_user)
+async def export_csv(request: Request, user: CurrentUserDep) -> ExportJob:
+    ...
+
+
+@router.post("/pdf")
+@limiter.shared_limit("20/hour", scope="exports", key_func=by_user)  # same scope → same bucket
+async def export_pdf(request: Request, user: CurrentUserDep) -> ExportJob:
+    ...
 ```
 
-```python
-# api/deps.py
-async def rate_limit_dep(request: Request) -> None:
-    # 20/hour for the whole /exports namespace, keyed by user not IP
-    await request.app.state.limiter.check(request, "20/hour", key=request.state.user_id)
-
-
-RateLimitDep = Annotated[None, Depends(rate_limit_dep)]
-```
+slowapi has no router-level hook — each route in the group carries the decorator; the shared `scope` is what makes them one bucket.
 
 ## Keying — IP, user, API key
 

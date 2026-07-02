@@ -311,13 +311,13 @@ Output:
 
 ### Stdout vs OTLP for log delivery
 
-| Method                          | Pros                                                                       | Cons                                                                                     |
-| ------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Stdout only + filelog collector | All logs visible via `kubectl logs`; library/bootstrap/crash logs included | Needs a collector to forward                                                             |
-| OTLP only (Logs SDK)            | Native OTLP, no parsing                                                    | Bypasses runtime — `kubectl logs` empty; bootstrap/crash logs lost; outage = silent loss |
-| Both                            | Belt-and-suspenders                                                        | **Duplicate records** at the backend — doubles cost                                      |
+| Method                          | Pros                                                                        | Cons                                                                                                    |
+| ------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| OTLP only (Logs SDK)            | Native OTLP, no parsing; same pipeline as traces and metrics                | Bypasses the runtime — `kubectl logs` empty; bootstrap/crash logs lost; Collector outage = silent loss |
+| Stdout only + filelog collector | All logs visible via `kubectl logs`; library/bootstrap/crash logs included | Needs a collector to forward; JSON parsing step                                                          |
+| Both                            | Belt-and-suspenders                                                         | **Duplicate records** at the backend — doubles cost                                                     |
 
-**Default: stdout/stderr only.** Write structured JSON; let the Collector's filelog receiver pick them up. Do not run both the OTel Logs SDK exporter and a filelog receiver without explicit deduplication.
+**Project default: OTLP.** All three signals go out over OTLP (`OTEL_LOGS_EXPORTER` already defaults to `otlp` in Python) — see the SKILL.md principles and `python-infrastructure/references/observability.md`. Choose stdout-only when you need bootstrap/crash logs or `kubectl logs` visibility: write structured single-line JSON and let the Collector's filelog receiver pick it up (see `python-sdk.md` § JSON output for stdout collection). Whichever you pick, do not run both the OTel Logs SDK exporter and a filelog receiver without explicit deduplication.
 
 ## Cross-references
 

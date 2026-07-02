@@ -137,7 +137,7 @@ $ dagger
 - Pipe (`|`) chains function calls on returned types
 - `terminal` opens an interactive shell inside any container for debugging
 - `.help` on any type shows available methods
-- All function/arg names use kebab-case in Shell and CLI
+- Naming: SKILL.md key rule 2 (Go names convert to kebab-case)
 
 ## CI integration
 

@@ -1,12 +1,12 @@
 ---
 name: writing-python
-description: Idiomatic Python 3.14+ — language style, type safety, design patterns, anti-patterns, error handling, resource management, configuration, CLI, and testing. Pydantic-first (no dataclasses). Use when writing or reviewing Python code, scaffolding services or CLI tools, designing validation/exception strategies, externalizing config, or establishing project conventions. NOT FOR system-reliability concerns like background jobs, retries, or observability (use `python-infrastructure`).
+description: Idiomatic Python 3.14+, Pydantic-first (not dataclasses), uv/ruff/ty toolchain. Use when writing or reviewing Python code — style, typing, design patterns, anti-patterns, error handling, resources, config, CLI, testing — or establishing project conventions. NOT for background jobs, retries, or observability (use `python-infrastructure`).
 allowed-tools: Read, Bash, Grep, Glob
 ---
 
 # Writing Python (3.14+)
 
-Language-level Python for this project: stdlib first, Pydantic for any structured data, `uv`/`ruff`/`ty` for tooling, type hints everywhere.
+Language-level Python for this project.
 
 ## Scope routing
 
@@ -19,7 +19,7 @@ Language-level Python for this project: stdlib first, Pydantic for any structure
 | Validate inputs, design exception hierarchies, handle partial failures     | `references/error-handling.md`      |
 | Manage connections/file handles/streams via context managers               | `references/resource-management.md` |
 | Load env vars, set up `pydantic-settings`, validate config at boot         | `references/configuration.md`       |
-| Look up everyday patterns (project layout, async, logging, pathlib)        | `references/patterns.md`            |
+| Look up everyday patterns (project layout, async, functools caching/dispatch, pathlib, logging) | `references/patterns.md`            |
 | Build a CLI (`typer`, output formats, progress, exit codes)                | `references/cli.md`                 |
 | Write tests with `pytest` (fixtures, async, parametrize, coverage)         | `references/testing.md`             |
 
@@ -30,10 +30,9 @@ Language-level Python for this project: stdlib first, Pydantic for any structure
 - **`uv` for everything Python-level.** Don't use `pip`/`poetry`/`pyenv` directly.
 - **`ruff` for lint + format.** Don't add `black`/`isort`/`flake8`.
 - **`ty` for type checking.** Don't add `mypy`/`pyright`. CI runs `uvx ty check`.
-- **Stdlib first.** Only add a dep when stdlib genuinely doesn't fit (e.g. `httpx` for async HTTP, `pydantic` for validation).
-- **Explicit over clever.** Readable beats elegant.
+- **Stdlib first.** Only add a dep when stdlib genuinely doesn't fit (e.g. `httpx` for async HTTP, `typer`/`rich` for CLIs, `pydantic` for validation).
 - **Fail fast.** Validate at boundaries; raise informative errors immediately.
-- **Self-documenting code, not noise comments.** Reach for a comment when the _why_ is non-obvious (workaround, constraint, surprising invariant). When you'd write one to explain _what_ the code does, ask first whether a clearer name or a small extracted function would read better — usually it does, sometimes the inline code is fine and a split would just add noise. Judgment call. Never restate what the code already says. See `references/code-style.md`.
+- **Self-documenting code, not noise comments.** Comment only the non-obvious _why_; the default is no comment. See `references/code-style.md`.
 
 ## Quick patterns
 
@@ -89,13 +88,12 @@ uv run fastapi dev         # FastAPI app, when applicable
 ## Cross-skill boundaries
 
 - **`python-infrastructure`** — what to do when the function above needs to retry across a network boundary, run in a worker, or be observable in prod.
-- **`fastapi`** — HTTP routing, dependency injection, FastAPI/Pydantic conventions.
+- **`fastapi`** — HTTP routing, dependency injection, async-vs-sync runtime semantics, FastAPI/Pydantic conventions.
+- **`testing-python`** — this repo's pytest wiring (config, markers, fixture layout); `references/testing.md` here covers technique only.
 - **`astral:uv`** / **`astral:ruff`** / **`astral:ty`** — deep tool reference for the toolchain.
 
 ## Top gotchas
 
-- **`async def` vs `def` for FastAPI dependencies**: async deps run on the event loop; sync deps run in a thread pool. Mixing without thought causes blocking or extra context-switch overhead.
 - **Mutable default arguments share state** — `def f(x=[]):` reuses the same list across calls. Use `x: list | None = None` and create inside.
 - **`assert` is stripped by `python -O`** — never use for runtime validation; only for code-internal invariants.
 - **Pydantic API surface to remember** — `model_dump` / `model_validate` / `model_dump_json` / `model_validate_json`, `Field(alias=..., default_factory=...)`, `model_config = {...}`, `@field_validator` / `@model_validator`. Don't paste snippets using `dict()`, `parse_obj()`, `Config` class, or `@validator` — those are from an older API and won't work.
-- **`functools.lru_cache` on instance methods retains `self` forever** — apply to module-level functions, or use `methodtools.lru_cache`.

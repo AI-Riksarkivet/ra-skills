@@ -19,7 +19,6 @@ Fundamental design principles for maintainable Python code: KISS, single respons
 - Law of Demeter — no train wrecks
 - DRY — knowledge, not code
 - Pattern translation — Java GoF → Pythonic form
-- Summary
 - Gotchas
 
 ## KISS — keep it simple
@@ -354,10 +353,10 @@ SOLID was written for Java. Naively bolting all five onto Python produces Java-i
 | **S** — Single Responsibility | **Keep.** Always useful. Already covered above.                                                                                                                                 |
 | **O** — Open/Closed           | **Reframe.** In Python, "open for extension" means "add a new function and put it in a dict / Protocol", not "make a new subclass". Don't build inheritance hierarchies for it. |
 | **L** — Liskov Substitution   | **Barely applies.** Python uses duck typing — if it quacks, it's a duck. Liskov shows up only when you actually subclass, which you should rarely do.                           |
-| **I** — Interface Segregation | **Use `Protocol`, sparingly.** Define a `Protocol` only when there are 2+ implementations and you want to type-check them. One-implementation interfaces are pure ceremony.     |
+| **I** — Interface Segregation | **Use `Protocol`, sparingly** — per the defaults above; one-implementation interfaces are pure ceremony. See `type-safety.md` § Protocols for structural typing.                |
 | **D** — Dependency Inversion  | **Keep, but lightweight.** Pass dependencies through `__init__` (or FastAPI `Depends`). No containers, no factories. Constructor + `Protocol` is enough.                        |
 
-**Default to functions and modules. Reach for classes when you have state. Reach for `Protocol` when you have multiple implementations. Reach for inheritance almost never.** Composition + dict dispatch + module-level functions cover 90% of what SOLID-in-Java tries to solve with class hierarchies.
+See the **Defaults** blockquote at the top of this file. Composition + dict dispatch + module-level functions cover 90% of what SOLID-in-Java tries to solve with class hierarchies.
 
 If your "SOLID refactor" added an ABC, a factory, a DI container, and three interfaces for one concrete implementation — undo it. The original code was probably fine.
 
@@ -440,25 +439,9 @@ When asked to "implement pattern X in Python", default to the Python form. The J
 
 If you're asked to implement a named pattern and the Python form isn't in this table, the answer is almost always "use a function or a `Protocol`, not a class hierarchy".
 
-## Summary
-
-1. **Keep it simple** — simplest thing that works.
-2. **Single responsibility** — one reason to change per unit.
-3. **Layered architecture** — handlers → services → repositories.
-4. **Compose, don't inherit** — combine objects via constructor injection.
-5. **Rule of three** — wait before abstracting.
-6. **Small focused functions** — 20–50 lines, one purpose.
-7. **Guard clauses** — exit early, keep the happy path flat.
-8. **SOLID lightly** — keep S and D, reframe O, mostly skip L and I.
-9. **Law of Demeter** — one dot through behavior boundaries.
-10. **DRY knowledge, not code** — same rule in 2+ places means unify; same shape, different concept means leave alone.
-11. **Inject dependencies via Protocols** — for testability.
-12. **Delete before abstracting** — remove dead code first.
-13. **Explicit over clever** — readable beats elegant.
-
 ## Gotchas
 
 - **Singleton via `__new__` doesn't work cleanly with subclasses** — each subclass gets its own instance. Use a module-level instance or `__init_subclass__` if needed.
 - **Observer pattern with strong references leaks memory** when subscribers go out of scope but the publisher holds them. Use `weakref.WeakSet` for subscriber storage.
-- **`functools.lru_cache` on instance methods retains `self` forever** (via the cache holding the bound method) — apply to module-level functions, or use `methodtools.lru_cache`.
+- **Caching a method?** See `patterns.md` § Functools toolkit for the `lru_cache`-on-instance-methods trap.
 - **ABCs: `@abstractmethod` enforced at instantiation, not subclass definition** — a subclass missing the method passes type-checking until you try to construct it.

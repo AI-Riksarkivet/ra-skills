@@ -97,28 +97,9 @@ class DbConfig(BaseSettings):
 
 ## Sessions are per-request — engine is per-process
 
-The `SessionDep` wrapper (see `production-patterns.md` § DI from `app.state`) yields one `AsyncSession` per request and commits/rollbacks around the handler. Never create a module-level session — sessions hold a checked-out connection until commit/rollback, so a long-lived one starves the pool.
+The `SessionDep` wrapper yields one `AsyncSession` per request and commits/rollbacks around the handler. Never create a module-level session — sessions hold a checked-out connection until commit/rollback, so a long-lived one starves the pool.
 
-```python
-# api/deps.py — already covered in production-patterns.md, repeated for completeness
-from collections.abc import AsyncGenerator
-from typing import Annotated
-from fastapi import Depends, Request
-from sqlmodel.ext.asyncio.session import AsyncSession
-
-
-async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:
-    async with AsyncSession(request.app.state.db_engine, expire_on_commit=False) as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-
-
-SessionDep = Annotated[AsyncSession, Depends(get_db)]
-```
+The `get_db` / `SessionDep` code lives in one place: `production-patterns.md` § Dependency injection from `app.state` — don't copy it here.
 
 Routes consume `SessionDep` — never read `app.state.db_engine` directly.
 

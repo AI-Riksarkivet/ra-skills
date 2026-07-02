@@ -8,22 +8,107 @@
     "version": "1.0.0"
   },
   "plugins": [
-    { "name": "writing-python",        "source": "./skills/writing-python",        "skills": "./", "description": "Idiomatic Python 3.14+ — type safety, Pydantic-first patterns, error handling, config, CLI." },
-    { "name": "writing-typescript",    "source": "./skills/writing-typescript",    "skills": "./", "description": "Idiomatic TypeScript for the SvelteKit frontend + component lib — strict typing, Result types, Bun/Vite/Vitest." },
-    { "name": "shadcn-svelte",         "source": "./skills/shadcn-svelte",         "skills": "./", "description": "shadcn-svelte components + CLI: add/update/fix components, composition, forms, icons, styling, components.json (official skill from huntabyte/shadcn-svelte)." },
-    { "name": "micro-frontends",       "source": "./skills/micro-frontends",       "skills": "./", "description": "Composing one UI from independently deployed frontends owned by separate teams: build-time / zones / server-side / client-side-runtime composition, Module Federation, single-spa, web components, cross-app communication, and when-to-use tradeoffs." },
-    { "name": "playwright-cli",        "source": "./skills/playwright-cli",        "skills": "./", "description": "Drive a browser + author Playwright tests from the terminal via playwright-cli (Playwright MCP): navigate/click/fill/snapshot/eval, test generation, request mocking, tracing, storage-state, video. Official skill from @playwright/cli (Apache-2.0, Microsoft)." },
-    { "name": "architecture-diagram",  "source": "./skills/architecture-diagram",  "skills": "./", "description": "Architecture diagrams for the rask platform as a single self-contained HTML file — interactive click-through flows (animated steps, mode toggles, side panel, drag) OR static export-ready topology snapshots with cloud/cluster/security-group/zone boundaries; both with built-in PNG/PDF/clipboard export. Biased to the RA stack: Ray, Argo Workflows, GitOps, Kubernetes, NATS JetStream, Dapr, Redis, FastAPI, SvelteKit, turborepo, micro-frontends, HF Hub, OpenTelemetry, the HTR pipeline." },
-    { "name": "gsap",                  "source": "./skills/gsap",                  "skills": "./", "description": "GSAP (GreenSock) animation for the SvelteKit frontend — biased to SvelteKit 2 + Svelte 5 (runes): tweens, timelines, ScrollTrigger (scroll reveals, parallax, pinning, scrub), and the now-free plugins (SplitText, Flip, Draggable, MorphSVG, ScrollSmoother). Svelte-first integration via the {@attach} pattern, gsap.context()/matchMedia() cleanup, SSR-safe setup, and Lenis smooth scroll, with copy-paste templates ($lib/gsap.ts, attachment factories, a golden-path component, a root +layout.svelte) and per-topic references. Original work; credits the official GreenSock gsap-skills (MIT)." },
-    { "name": "svelte-flow",           "source": "./skills/svelte-flow",           "skills": "./", "description": "Svelte Flow (@xyflow/svelte) node-based UI / flow-graph / diagram editors for the SvelteKit frontend — biased to SvelteKit 2 + Svelte 5 (runes): the <SvelteFlow /> component, custom nodes & edges, handles, Background/Controls/MiniMap/Panel, hooks (useSvelteFlow, useNodes/useEdges, useNodeConnections, useUpdateNodeInternals, …), edge-path utils (getBezierPath/getSmoothStepPath/getStraightPath), graph utils (addEdge, getIncomers/getOutgoers, getConnectedEdges), connection validation, reconnectable edges, sub-flows, theming, SSR, TypeScript generics, and external layouting (dagre/d3/elkjs). Encodes the Svelte 5 reality Claude gets wrong — nodes/edges are $state.raw and immutable, bind:nodes/edges, hooks return .current inside the flow context, import the stylesheet — with copy-paste SvelteKit templates and a reference per topic. API verified against @xyflow/svelte 1.6." },
-    { "name": "fastapi",               "source": "./skills/fastapi",               "skills": "./", "description": "FastAPI + Pydantic production patterns: async, dependency injection, repositories, services, tests." },
-    { "name": "testing-python",        "source": "./skills/testing-python",        "skills": "./", "description": "pytest for the rask suite — importlib import-mode, explicit testpaths, the slow marker, async + respx HTTP mocking." },
-    { "name": "python-infrastructure", "source": "./skills/python-infrastructure", "skills": "./", "description": "System-reliability Python: NATS JetStream jobs, Dapr workflows, tenacity retries, Redis cache, OTLP." },
-    { "name": "otel",                  "source": "./skills/otel",                  "skills": "./", "description": "OpenTelemetry for Python services — SDK setup, spans/metrics/logs, semantic conventions, the Collector pipeline." },
-    { "name": "dagger",                "source": "./skills/dagger",                "skills": "./", "description": "Dagger modules/functions in Go for container builds and CI/CD as typed, composable pipelines." },
-    { "name": "dockerfile",            "source": "./skills/dockerfile",            "skills": "./", "description": "Production dockerfiles — multi-stage discipline, BuildKit cache mounts, hadolint, the .docker build-context contract." },
-    { "name": "turborepo",             "source": "./skills/turborepo",             "skills": "./", "description": "Turborepo monorepo build system — turbo.json task pipelines, caching/remote cache, --filter/--affected, CI optimization, boundaries." },
-    { "name": "zensical-setup",        "source": "./skills/zensical-setup",        "skills": "./", "description": "Set up and configure Zensical (zensical.toml): palette, nav, theme features, mkdocstrings, GitHub Pages deploy." },
-    { "name": "zensical-authoring",    "source": "./skills/zensical-authoring",    "skills": "./", "description": "Author Zensical docs: admonitions, superfences/mermaid, tabbed blocks, tasklists, grids, icons, front matter." }
+    {
+      "name": "writing-python",
+      "source": "./skills/writing-python",
+      "skills": "./",
+      "description": "Idiomatic Python 3.14+, Pydantic-first (not dataclasses), uv/ruff/ty toolchain. Use when writing or reviewing Python code — style, typing, design patterns, anti-patterns, error handling, resources, config, CLI, testing — or establishing project conventions. NOT for background jobs, retries, or observability (use `python-infrastructure`)."
+    },
+    {
+      "name": "writing-typescript",
+      "source": "./skills/writing-typescript",
+      "skills": "./",
+      "description": "Idiomatic TypeScript for the SvelteKit frontend + component lib — strict typing, Result types, Bun/Vite/Vitest."
+    },
+    {
+      "name": "shadcn-svelte",
+      "source": "./skills/shadcn-svelte",
+      "skills": "./",
+      "description": "shadcn-svelte components + CLI: add/update/fix components, composition, forms, icons, styling, components.json (official skill from huntabyte/shadcn-svelte)."
+    },
+    {
+      "name": "micro-frontends",
+      "source": "./skills/micro-frontends",
+      "skills": "./",
+      "description": "Composing one UI from independently deployed frontends owned by separate teams: build-time / zones / server-side / client-side-runtime composition, Module Federation, single-spa, web components, cross-app communication, and when-to-use tradeoffs."
+    },
+    {
+      "name": "playwright-cli",
+      "source": "./skills/playwright-cli",
+      "skills": "./",
+      "description": "Drive a browser + author Playwright tests from the terminal via playwright-cli (Playwright MCP): navigate/click/fill/snapshot/eval, test generation, request mocking, tracing, storage-state, video. Official skill from @playwright/cli (Apache-2.0, Microsoft)."
+    },
+    {
+      "name": "architecture-diagram",
+      "source": "./skills/architecture-diagram",
+      "skills": "./",
+      "description": "Architecture diagrams for the rask platform as a single self-contained HTML file — interactive click-through flows (animated steps, mode toggles, side panel, drag) OR static export-ready topology snapshots with cloud/cluster/security-group/zone boundaries; both with built-in PNG/PDF/clipboard export. Biased to the RA stack: Ray, Argo Workflows, GitOps, Kubernetes, NATS JetStream, Dapr, Redis, FastAPI, SvelteKit, turborepo, micro-frontends, HF Hub, OpenTelemetry, the HTR pipeline."
+    },
+    {
+      "name": "gsap",
+      "source": "./skills/gsap",
+      "skills": "./",
+      "description": "GSAP (GreenSock) animation for the SvelteKit frontend — biased to SvelteKit 2 + Svelte 5 (runes): tweens, timelines, ScrollTrigger (scroll reveals, parallax, pinning, scrub), and the now-free plugins (SplitText, Flip, Draggable, MorphSVG, ScrollSmoother). Svelte-first integration via the {@attach} pattern, gsap.context()/matchMedia() cleanup, SSR-safe setup, and Lenis smooth scroll, with copy-paste templates ($lib/gsap.ts, attachment factories, a golden-path component, a root +layout.svelte) and per-topic references. Original work; credits the official GreenSock gsap-skills (MIT)."
+    },
+    {
+      "name": "svelte-flow",
+      "source": "./skills/svelte-flow",
+      "skills": "./",
+      "description": "Svelte Flow (@xyflow/svelte) node-based UI / flow-graph / diagram editors for the SvelteKit frontend — biased to SvelteKit 2 + Svelte 5 (runes): the <SvelteFlow /> component, custom nodes & edges, handles, Background/Controls/MiniMap/Panel, hooks (useSvelteFlow, useNodes/useEdges, useNodeConnections, useUpdateNodeInternals, …), edge-path utils (getBezierPath/getSmoothStepPath/getStraightPath), graph utils (addEdge, getIncomers/getOutgoers, getConnectedEdges), connection validation, reconnectable edges, sub-flows, theming, SSR, TypeScript generics, and external layouting (dagre/d3/elkjs). Encodes the Svelte 5 reality Claude gets wrong — nodes/edges are $state.raw and immutable, bind:nodes/edges, hooks return .current inside the flow context, import the stylesheet — with copy-paste SvelteKit templates and a reference per topic. API verified against @xyflow/svelte 1.6."
+    },
+    {
+      "name": "fastapi",
+      "source": "./skills/fastapi",
+      "skills": "./",
+      "description": "FastAPI best practices, conventions, and production project templates. Use when writing, reviewing, or refactoring FastAPI or Pydantic API code, when scaffolding a new FastAPI project, or when building any new Python HTTP/REST service (FastAPI is the house standard)."
+    },
+    {
+      "name": "testing-python",
+      "source": "./skills/testing-python",
+      "skills": "./",
+      "description": "pytest for the rask suite — importlib import-mode, explicit testpaths, the slow marker, async + respx HTTP mocking."
+    },
+    {
+      "name": "python-infrastructure",
+      "source": "./skills/python-infrastructure",
+      "skills": "./",
+      "description": "Python system-reliability patterns for this project's services. Use when queueing tasks or building async workers (NATS JetStream / nats-py), designing durable multi-step workflows that must survive crashes (Dapr Workflow / dapr-ext-workflow), handling transient failures with retries/backoff (tenacity) or circuit breakers, caching with Redis, or instrumenting services with OpenTelemetry traces/metrics/logs (OTLP). NOT FOR language idioms or type hygiene (use `writing-python`), HTTP routing (use `fastapi`), or deep OTel reference (use `otel`)."
+    },
+    {
+      "name": "otel",
+      "source": "./skills/otel",
+      "skills": "./",
+      "description": "OpenTelemetry for Python services — SDK setup, spans/metrics/logs, semantic conventions, the Collector pipeline."
+    },
+    {
+      "name": "dagger",
+      "source": "./skills/dagger",
+      "skills": "./",
+      "description": "Write Dagger modules and functions in Go — CI/CD pipelines and container builds as typed, composable code that runs identically locally and in CI. Use when the user mentions dagger (module, shell, Daggerverse, dagger.json, Dagger Cloud) or code uses dag.* types (dag.Container, dag.Directory); wants to replace shell scripts or YAML CI configs with Go pipeline code; is building or publishing container images in a build-test-push pipeline (Docker registry, PyPI); or needs pipeline supply-chain security — Trivy vulnerability scans, SBOM generation, provenance attestation, cosign signing."
+    },
+    {
+      "name": "dockerfile",
+      "source": "./skills/dockerfile",
+      "skills": "./",
+      "description": "Production dockerfiles — multi-stage discipline, BuildKit cache mounts, hadolint, the .docker build-context contract."
+    },
+    {
+      "name": "turborepo",
+      "source": "./skills/turborepo",
+      "skills": "./",
+      "description": "Turborepo monorepo build system — turbo.json task pipelines, caching/remote cache, --filter/--affected, CI optimization, boundaries."
+    },
+    {
+      "name": "zensical-setup",
+      "source": "./skills/zensical-setup",
+      "skills": "./",
+      "description": "Set up and configure Zensical (zensical.toml): palette, nav, theme features, mkdocstrings, GitHub Pages deploy."
+    },
+    {
+      "name": "zensical-authoring",
+      "source": "./skills/zensical-authoring",
+      "skills": "./",
+      "description": "Author Zensical docs: admonitions, superfences/mermaid, tabbed blocks, tasklists, grids, icons, front matter."
+    }
   ]
 }
