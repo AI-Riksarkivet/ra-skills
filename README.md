@@ -262,6 +262,64 @@ The generators are PEP-723 single-file `uv run` scripts (zero dependencies). Val
 that every skill's frontmatter `name` equals its directory basename **and** its `marketplace.json`
 entry — keep the three in lockstep.
 
+### Adding a new skill
+
+1. `mkdir skills/<name>` — the frontmatter `name` **must** equal the folder name (CI enforces it).
+2. Write `SKILL.md` from the skeleton below. Keep it ≤ ~100 lines: only every-path material inline.
+3. Push branch-specific detail into `references/<topic>.md` (one file per branch), copy-paste
+   code into `assets/` or `templates/`.
+4. Add the plugin entry to `.claude-plugin/marketplace.json`:
+
+   ```json
+   { "name": "<name>", "source": "./skills/<name>", "skills": "./", "description": "<same as frontmatter>" }
+   ```
+
+5. `./scripts/publish.sh` — regenerates `agents/AGENTS.md` + the README table and validates the
+   name lockstep. Commit; consumers pick it up via `/plugin marketplace update ra-skills` →
+   `/plugin install <name>@ra-skills` (or automatically with `autoUpdate: true`).
+
+**`SKILL.md` skeleton** (the shape of our best-audited skills — `writing-python`,
+`python-infrastructure`):
+
+```markdown
+---
+name: <folder-name>
+description: >
+  <Leading word first — what this is, one clause.> Use when <trigger branch 1>,
+  <trigger branch 2>, <branch 3 — one trigger per genuinely distinct branch, no
+  synonym padding>. NOT for <adjacent topic> (use `<other-skill>`).
+---
+
+# <Skill title>
+
+One-line identity. Do not restate the description or add a "When to use" section —
+the description already did the trigger work.
+
+## Scope routing
+
+| If you need to… | Read |
+|---|---|
+| <branch-1 task, worded with the tokens an agent would actually think with> | `references/<topic-1>.md` |
+| <branch-2 task> | `references/<topic-2>.md` |
+
+## House rules — non-negotiable
+
+- **<Rule as a compact leading phrase.>** One line each; only rules every branch needs.
+
+## Top gotchas
+
+- **<gotcha>** — one line; the detail lives in exactly one reference, pointed at here.
+
+## Cross-skill boundaries
+
+- **`<other-skill>`** — owns <topic>; this skill defers <X> there (and that skill's
+  boundary section should agree).
+```
+
+Review your draft against the [authoring standard](#authoring-standard-writing-great-skills)
+before opening the PR — especially: no rule stated in two places, no reference file unreachable
+from the routing table, and no `Summary`/`Contents` sections inside references.
+
 ## License
 
 [Apache-2.0](LICENSE).
