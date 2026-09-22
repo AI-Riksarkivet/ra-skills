@@ -7,6 +7,8 @@ API-level streaming responses — JSON Lines, Server-Sent Events, raw byte strea
 - Stream JSON Lines
 - Server-Sent Events (SSE)
 - Stream bytes
+- Arrow IPC (columnar payloads)
+- When to return `StreamingResponse` directly
 
 ## Stream JSON Lines
 
@@ -92,10 +94,12 @@ def stream_image_no_async_no_annotation():
         yield from image_file
 ```
 
-prefer this over returning a `StreamingResponse` directly:
+prefer this over returning a `StreamingResponse` directly — **unless the producer can fail or the
+response needs a dynamic status/headers**, in which case see
+[When to return `StreamingResponse` directly](#when-to-return-streamingresponse-directly):
 
 ```python
-# DO NOT DO THIS
+# DO NOT DO THIS (see the exception above)
 
 import anyio
 from fastapi import FastAPI
@@ -113,3 +117,84 @@ class PNGStreamingResponse(StreamingResponse):
 async def main():
     return PNGStreamingResponse(read_image())
 ```
+
+## Arrow IPC (columnar payloads)
+
+Every FastAPI+Arrow example online reaches for the same shape — `BytesIO` + `RecordBatchFileWriter` +
+`Response`:
+
+```python
+# Fine for a small answer. NOT fine when the size is a property of the data.
+sink = BytesIO()
+with pa.ipc.RecordBatchFileWriter(sink, table.schema) as writer:
+    writer.write_table(table)
+return Response(content=sink.getvalue(), media_type="application/vnd.apache.arrow.file")
+```
+
+That holds **three copies at once**: the scan's table, the IPC encoding beside it, and the `bytes`
+the response takes. Measured on rask's change feed (200k rows x 256B, 58.4 MB of Arrow): peak RSS
+**147.6 MB, 2.53x the payload**. Streaming it dropped that to **60.1 MB, 1.03x**, with the wire
+output byte-identical.
+
+`pa.BufferOutputStream` does not help — it accumulates until `getvalue()`. But Arrow's writers accept
+a **writeable Python object** (IPC guide; `pa.output_stream` takes `source : str, Path, buffer,
+file-like object`), so a sink that hands each message out and forgets it is first-class API:
+
+```python
+class _ChunkSink(io.RawIOBase):
+    """Holds only what the writer emitted since the last drain."""
+
+    def __init__(self) -> None:
+        self._parts: list[bytes] = []
+
+    def writable(self) -> bool:
+        return True
+
+    def write(self, b) -> int:
+        self._parts.append(bytes(b))
+        return len(self._parts[-1])
+
+    def drain(self) -> bytes:
+        out = b"".join(self._parts)
+        self._parts.clear()
+        return out
+
+
+def arrow_file_chunks(schema, batches) -> Iterator[bytes]:
+    sink = _ChunkSink()
+    with pa.ipc.new_file(sink, schema) as writer:
+        for batch in batches:
+            writer.write_batch(batch)
+            if chunk := sink.drain():
+                yield chunk
+    if chunk := sink.drain():   # the FOOTER — it is written on close, so it is the last chunk
+        yield chunk
+```
+
+**FILE vs STREAM framing is a contract, not a tuning knob.** A client calling `open_file` on stream
+framing (or the reverse) fails at the first batch. FILE framing streams fine — the footer is written
+when the writer closes, which is why the close must happen *inside* the generator.
+
+## When to return `StreamingResponse` directly
+
+The `response_class=` + `yield` form above is right when the producer cannot fail. It is **wrong when
+the producer validates**, and the failure is silent.
+
+With `yield from producer()` the endpoint IS the generator, so the producer runs after the response
+has already begun. Measured: a producer that raises gives the caller **200 with an empty body**.
+Returning the response calls the producer in the endpoint body, where the same raise is a 500 an
+exception handler can turn into a 400.
+
+```python
+@app.post("/changes")
+def changes(...) -> Response:
+    data = read_changes(...)   # raises HERE, while a 4xx is still possible
+    return StreamingResponse(data, media_type=ARROW_FILE)
+```
+
+This matters for lazy scanners. `Dataset.scanner(...)` constructs happily and raises only on the
+first pull, so the producer should pull one batch eagerly, inside its error guard, and stream the
+rest — otherwise a bad column or predicate becomes a short, unopenable 200.
+
+Returning it directly is also required when the response needs a dynamic `status_code` or headers
+(206 + `Content-Range` for a ranged read, say), which `response_class=` cannot express.
