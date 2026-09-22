@@ -8,6 +8,7 @@ API-level streaming responses — JSON Lines, Server-Sent Events, raw byte strea
 - Server-Sent Events (SSE)
 - Stream bytes
 - Arrow IPC (columnar payloads)
+- Receiving Arrow in a request
 - When to return `StreamingResponse` directly
 
 ## Stream JSON Lines
@@ -174,6 +175,56 @@ def arrow_file_chunks(schema, batches) -> Iterator[bytes]:
 **FILE vs STREAM framing is a contract, not a tuning knob.** A client calling `open_file` on stream
 framing (or the reverse) fails at the first batch. FILE framing streams fine — the footer is written
 when the writer closes, which is why the close must happen *inside* the generator.
+
+## Receiving Arrow in a request
+
+**FastAPI has no native Arrow support, and the failure is at import time, not request time.** Both of
+these are circulating in blog posts; both were run and both raise:
+
+```python
+# FastAPIError: Invalid args for response field! ... is a valid Pydantic field type
+@app.post("/process_batch/")
+async def process_batch(batch: pa.RecordBatch): ...
+
+# PydanticSchemaGenerationError: Unable to generate pydantic-core schema for
+#   <class 'pyarrow.lib.TimestampType'>
+class MyDataModel(BaseModel):
+    timestamp: pa.TimestampType
+```
+
+The first fails when the route is REGISTERED — the app will not start. So "validate the Arrow schema
+with a Pydantic model" is not an available design: Pydantic does not model Arrow types. Validate with
+Arrow's own `schema.equals(expected)` after reading.
+
+Read the body yourself and let Arrow parse it:
+
+```python
+@app.post("/ingest")
+async def ingest(request: Request) -> IngestResult:
+    body = await request.body()
+    try:
+        table = pa.ipc.open_stream(pa.py_buffer(body)).read_all()
+    except pa.ArrowInvalid as exc:
+        raise HTTPException(status_code=400, detail=f"not Arrow IPC stream framing: {exc}") from exc
+    if not table.schema.equals(EXPECTED_SCHEMA):
+        raise HTTPException(status_code=422, detail=f"schema mismatch: {table.schema}")
+    ...
+```
+
+Two things that bite:
+
+- **`await request.body()` buffers the whole upload.** That is the request-side twin of the response
+  defect above. Cap it — a `Content-Length` check, a reverse-proxy limit, or middleware — because an
+  unbounded columnar upload is sized by the client.
+- **A framing mismatch does not say so.** Sending FILE framing to `open_stream` (or the reverse)
+  raises `Expected to read 1330795073 metadata bytes` — that number is the `ARROW1` magic read as a
+  length. Agree on framing as a contract and say which one in the media type
+  (`application/vnd.apache.arrow.file` vs `.stream`); do not expect the error to diagnose it.
+
+**Do not route Arrow through Pandas or JSON** (`batch.to_pandas().to_json()`). It discards the
+columnar layout, the zero-copy buffers and the type fidelity that are the only reasons to use Arrow —
+a JSON round-trip cannot even preserve an Arrow timestamp's unit. If the client needs JSON, it did not
+need Arrow.
 
 ## When to return `StreamingResponse` directly
 
