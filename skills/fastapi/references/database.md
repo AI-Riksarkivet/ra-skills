@@ -113,7 +113,7 @@ Caveats for PgBouncer transaction-mode:
 - No `LISTEN` / `NOTIFY` (use NATS instead).
 - No advisory locks across statements within a session.
 
-For the rask viewer's current load (single replica, < 50 in-flight), PgBouncer is over-engineering. Add it when you cross 80% of `max_connections`.
+For a single replica with fewer than 50 requests in flight, PgBouncer is over-engineering. Add it when you cross 80% of `max_connections`.
 
 ## Migrations (Alembic)
 

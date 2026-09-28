@@ -133,7 +133,7 @@ return Response(content=sink.getvalue(), media_type="application/vnd.apache.arro
 ```
 
 That holds **three copies at once**: the scan's table, the IPC encoding beside it, and the `bytes`
-the response takes. Measured on rask's change feed (200k rows x 256B, 58.4 MB of Arrow): peak RSS
+the response takes. Measured on a change feed (200k rows x 256B, 58.4 MB of Arrow): peak RSS
 **147.6 MB, 2.53x the payload**. Streaming it dropped that to **60.1 MB, 1.03x**, with the wire
 output byte-identical.
 

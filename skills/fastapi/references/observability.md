@@ -74,7 +74,7 @@ def server_request_hook(span: trace.Span, scope: dict) -> None:
     if rid := headers.get("x-request-id"):
         span.set_attribute("request.id", rid)
     if tenant := headers.get("x-tenant-id"):
-        span.set_attribute("rask.tenant.id", tenant)
+        span.set_attribute("app.tenant.id", tenant)
 
 
 FastAPIInstrumentor.instrument_app(app, server_request_hook=server_request_hook)
@@ -97,9 +97,9 @@ async def create_order(payload: OrderCreate, svc: OrderServiceDep) -> OrderPubli
     # The HTTP span is created by FastAPIInstrumentor — don't wrap the whole handler.
     # Wrap the *business operation* so its name shows up in the trace.
     with tracer.start_as_current_span("order.create") as span:
-        span.set_attribute("rask.order.priority", payload.priority)
+        span.set_attribute("app.order.priority", payload.priority)
         order = await svc.create(payload)
-    span.set_attribute("rask.order.id", str(order.id))
+    span.set_attribute("app.order.id", str(order.id))
     return order
 ```
 
@@ -112,7 +112,7 @@ Span names should describe **what the code is doing**, not where it lives (`orde
 | `span.record_exception(e)` in route / handler                | Deprecated in OTel; events are second-class. See `otel` SKILL.md § Top gotchas. | Log the exception inside the active span context — `trace_id`/`span_id` ride along. |
 | Wrapping the whole route body in `tracer.start_as_current_span` | Duplicates the auto-created HTTP span — two layers of noise.                  | Wrap only the *business operation* inside the route.                              |
 | Custom `BackgroundTasks` traced as a child of the request    | Tasks run *after* the response — the request span is already closed.            | Don't use `BackgroundTasks` for anything you want to observe. Use NATS JetStream + propagate context (see `python-infrastructure`). |
-| Setting `service.name` on every span                         | Resource attribute, not span attribute. Wasteful and wrong.                     | Set via env: `OTEL_SERVICE_NAME=rask-api`.                                       |
+| Setting `service.name` on every span                         | Resource attribute, not span attribute. Wasteful and wrong.                     | Set via env: `OTEL_SERVICE_NAME=orders-api`.                                     |
 | `OTLPSpanExporter(endpoint="http://collector:4317")` in code | Hard-coded endpoints don't survive multi-env deploys.                           | `OTEL_EXPORTER_OTLP_ENDPOINT` env var.                                           |
 | SDK-side sampling (`TraceIdRatioBased(0.1)`)                 | Drops traces before you know if the request errored.                            | Always-on at the SDK; tail sample in the Collector. See `otel` `references/collector.md`. |
 
