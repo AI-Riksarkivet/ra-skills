@@ -29,10 +29,11 @@ Save this as `$S/zero.py`:
 ```python
 import json
 import sys
+from pathlib import Path
 
-cov = json.load(open(sys.argv[1]))
+cov = json.loads(Path(sys.argv[1]).read_text())
 ran = {c.removesuffix("|run") for f in cov["files"].values() for cs in f["contexts"].values() for c in cs if c.endswith("|run")}
-for test_id in open(sys.argv[2]).read().split():
+for test_id in Path(sys.argv[2]).read_text().splitlines():  # a parametrize id may contain spaces
     if test_id not in ran:
         print(test_id)
 ```
@@ -58,7 +59,9 @@ whatever its line count.
 For two tests of the same seam, if test A's `|run` lines are a subset of test B's and A asserts
 nothing B does not, delete A. When the pair is a unit test and an integration test, keep the
 integration test. For parametrize cases of one function, keep one case per distinct line set (a
-distinct branch). Cases that walk the same lines are one case.
+distinct branch). Cases that walk the same lines are one case, except the two sides of a boundary:
+`n == limit` and `n == limit + 1` can walk the same comparison and each catches a different
+off-by-one. A shared line set is a candidate, and step 4's red check is the verdict.
 
 ## 4. Prove nothing was lost
 

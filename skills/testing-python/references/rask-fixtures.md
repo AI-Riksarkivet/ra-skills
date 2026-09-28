@@ -23,7 +23,8 @@ git stash push -- <path/to/fixed_module.py>          # set the fix aside; the te
 find <member>/src -name __pycache__ -prune -exec rm -rf {} +
 PYTHONDONTWRITEBYTECODE=1 uv run pytest <test_file>::<test_name> -p no:cacheprovider
 #   expect: FAILED, on the assertion that names the bug
-PYTHONDONTWRITEBYTECODE=1 uv run pytest <member>/tests tests/integration -m "not slow and not e2e" -n 16 -q -rf
+PYTHONDONTWRITEBYTECODE=1 uv run pytest <member>/tests tests/integration <dirs step 1 found> \
+  -m "not slow and not e2e" -n 16 -q -rf -p no:cacheprovider
 #   expect: your test is the ONLY failure. Another failure means that test catches the same bug;
 #   keep the integration one and delete the other.
 git stash pop
@@ -40,20 +41,41 @@ PYTHONDONTWRITEBYTECODE=1 uv run pytest <test_file>::<test_name>   # expect: pas
 
 ## A service app, with its lifespan
 
-Copy from `tests/integration/conftest.py::client`. The order is load-bearing:
+**Settings through an `lru_cache`d `get_*settings()`** (catalog, lineage, maintenance, medallion,
+annotator, search, viewer). Copy `tests/integration/conftest.py::real_ns_client`. The order is
+load-bearing:
 
 1. `monkeypatch.setenv` every variable the service's settings require. For the catalog that includes
    `LANCE_S3_ACCESS_KEY_ID`/`LANCE_S3_SECRET_ACCESS_KEY`, even on the `dir` backend, because settings
    validate them at construction.
-2. `get_settings.cache_clear()`. The service reads settings through a cached function, so without
-   this call the previous test's values survive.
-3. Import the app **inside** the fixture. `app = make_service_app(...)` runs at import.
+2. `get_settings.cache_clear()`, or the previous test's values survive.
+3. Import the app **inside** the fixture.
 4. Set `app.dependency_overrides[...]` on the registered callables.
 5. `with TestClient(app) as client:` so that the lifespan runs.
 6. Teardown: `app.dependency_overrides.clear()` and `get_settings.cache_clear()`.
 
-`packages/service-kit/tests/conftest.py` shows the autouse form for a suite in which every test builds
-an app. It pins required env from the ambient value, so a developer's own setting still wins.
+`cache_clear()` reaches only what is read per request. What the module reads at import stays as the
+first importer left it: `catalog/main.py`'s `_settings` fixes the docs switch, the body cap and the
+write-concurrency cap. A test of one of those needs `importlib.reload`.
+
+The sibling fixture `::client` has the same order over a `MagicMock(spec=LanceNamespace)`. It serves
+only claims about routing, identifier parsing and error mapping.
+
+**Settings read once at import** (`make_service_app`'s `build_settings()` in compute, controlplane,
+flows and notifications; `build_gateway_settings()` in the gateway):
+
+- Set the env the whole directory needs around the first import, in its `conftest.py`, then hand it
+  back. Copy `services/controlplane/tests/conftest.py`. Env left set leaks into every other testpath:
+  pytest collects all of them before it runs any test.
+- A test that needs another value sets it with `monkeypatch.setenv` and calls
+  `importlib.reload(<package>)` (`services/gateway/tests/test_notifications_proxy_shapes.py`).
+- Code in `service_kit` itself builds a synthetic app with `make_service_app(..., settings=...)`
+  (`packages/service-kit/tests/test_settings_are_injectable.py`).
+
+**Ingest** has `ingest.create_app()`. Call it per test (`services/ingest/tests/test_ingest_api.py`).
+
+`packages/service-kit/tests/conftest.py` shows an autouse fixture that pins required env from the
+ambient value, so a developer's own setting still wins.
 
 ## Real pylance on `tmp_path`
 
@@ -64,8 +86,6 @@ an app. It pins required env from the ambient value, so a developer's own settin
 - **A dataset shaped the way Lance writes it**: `tests/unit/conftest.py::overlay_dataset`, a factory
   fixture that commits through Lance's public API. Build odd manifests the same way, through Lance
   and not by hand, so that the test agrees with what Lance writes.
-- Use `tmp_path`, never a fixed directory. A fixed root lets one run pass on state an earlier run left
-  behind.
 
 ## A moto server that pylance can reach
 
@@ -76,27 +96,31 @@ serves S3 over HTTP, and the catalog is pointed at it with `LANCE_REST_ROOT=s3:/
 - `mock_aws()` is not enough here. It patches botocore, and Lance's and Arrow's native S3 clients never
   go through botocore.
 - The fixture is `scope="module"`: one server and one bucket per module. Each test isolates itself by
-  namespace (`m1`, `m2`, ...), not by bucket.
+  namespace name, not by bucket.
 - Plain `storage`/boto3 code does not need the server. `with mock_aws():` plus a boto3 client that
   seeds the bucket is enough (`packages/storage/tests/test_storage.py`).
 
 ## A live uvicorn socket
 
-Use one when the claim is about the wire. This estate has shipped a query-model binding that
-`TestClient` accepted and a live uvicorn rejected with 422 on every call
-(`tests/unit/test_search_spec_binding.py`). The rask example is
-`tests/unit/test_bronze_is_governed_end_to_end.py`. The generic fixture (port 0, a thread, a bounded
-wait for `server.started`) is in `fastapi` → `references/testing.md` § A real server.
+Use one when the claim is about the wire. `tests/unit/test_search_spec_binding.py` records a
+query-model binding that `TestClient` accepts and a live uvicorn on fastapi 0.140.13 rejects with 422
+on every call. The rask example is `tests/unit/test_bronze_is_governed_end_to_end.py`. The generic
+fixture (port 0, a thread, a bounded wait for `server.started`) is in `fastapi` →
+`references/testing.md` § A real server.
 
 ## NATS, locally
 
-CI binds a real NATS to the pytest container (`.dagger/test.go`). The ingest queue tests
-(`services/ingest/tests/test_worker_queue.py`) read `RASK_NATS_URL`. Locally, bring one up as a Dagger
-service (never docker) at the version the chart deploys:
+CI binds a real NATS to the pytest container (`.dagger/test.go`). The ingest queue suites read
+`RASK_NATS_URL` and **skip** when nothing answers there, so a local run with no broker reports skips,
+not failures. Bring one up as a Dagger service (never docker) at the version the chart deploys. `up`
+holds the foreground, so run it in the background or in a second shell:
 
 ```bash
 dagger core container from --address=nats:2.14.2-alpine with-exposed-port --port=4222 \
   with-default-args --args=nats-server,--jetstream as-service up --ports=14222:4222
+```
+
+```bash
 RASK_NATS_URL=nats://127.0.0.1:14222 uv run pytest services/ingest/tests/test_worker_queue.py -rs
 ```
 
@@ -105,9 +129,10 @@ Verified 2026-09-28: 6 passed, with no skips.
 ## The Ray job client
 
 Copy from `packages/ray-kit/tests/test_dashboard_bounds.py`: a small class that implements only the
-methods the code calls (`list_jobs`, `submit_job`, `stop_job`, ...) and is returned through
-`cast(JobSubmissionClient, fake)`. The typed signature stays honest and no Ray runtime starts. Use
-`cast`, never `# type: ignore`, because `ty` does not honour mypy's suppression syntax.
+methods the code under test calls (there, `list_jobs`), returned through
+`cast(JobSubmissionClient, fake)`. No Ray runtime starts, and the function under test keeps its real
+parameter type without a `# type: ignore`. The cast is not checked against Ray: give each fake method
+the real method's signature.
 
 ## The chart
 
@@ -116,6 +141,6 @@ manifests and is cached per verbatim flag tuple. `render_text(*flags)` returns H
 it for size budgets, because parsing drops comments). The result is a tuple because it is shared:
 never mutate it. Render through this module rather than calling your own `subprocess` helm.
 
-`render_text` still calls `pytest.skip("helm not available")` when helm is absent. That is the
-missing-tool skip SKILL.md rules out, so don't copy it into new code. It finds helm on `PATH`
-(`make k3s-install` installs it) or at `.localbin/helm`. The CI lane installs its own.
+`render_text` calls `pytest.skip("helm not available")` when helm is absent. That is the missing-tool
+skip SKILL.md rules out, so don't copy it into new code. It finds helm on `PATH` (`make k3s-install`
+installs it) or at `.localbin/helm`. The CI lane installs its own.

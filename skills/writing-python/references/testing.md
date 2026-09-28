@@ -124,7 +124,8 @@ cannot see, so the unit test is the cheaper duplicate.
 ## Parametrize
 
 - **One case per distinct branch or boundary.** Two cases that take the same path through the code
-  are one case.
+  are one case. The exception is the two sides of a boundary (`n == limit`, `n == limit + 1`): they
+  can take the same path and each catches a different off-by-one.
   Why: each extra case costs runtime and reads as coverage it does not add.
 - **Parametrize over inputs to the unit, never over the repository's files.**
   Why: a case per source file grows with the tree and tests the tree, not the unit.
@@ -189,9 +190,11 @@ def test_validate_email_rejects(email: str, error: str) -> None:
   agrees with the bug.
 - **Prefer a fake to a mock.** A fake is a small working implementation (an in-memory repository) and
   behaves consistently across every test that uses it. A `Mock` answers whatever each test told it.
-- **A double carries the whole signature**: `create_autospec(Real, instance=True)`, or a structural
-  fake passed through `typing.cast` to the real type. Build your own classes (settings, models) for
-  real with test values. Never stand them in with a `SimpleNamespace` or a `type(...)` object.
+- **A double carries the whole signature.** `create_autospec(Real, instance=True)` raises on a call
+  the real signature would reject. A structural fake passed through `typing.cast` keeps the code under
+  test typed, but nothing checks the fake against the real class, so give each of its methods the real
+  method's signature. Build your own classes (settings, models) for real with test values. Never stand
+  them in with a `SimpleNamespace` or a `type(...)` object.
   Why: a narrow stand-in cannot see the signature change it exists to catch. The test stays green while
   production breaks.
 - **Patch where the name is used, not where it is defined.**
@@ -340,15 +343,17 @@ December is not added: it walks the same 31-day branch as January.
 
 ## `skip` and `xfail`
 
-A skip is a question ("is this still valid?"). Fix the test or delete it. A skip that stays names
-what unblocks it:
+A skip is a question ("is this still valid?"). Fix the test or delete it. A test that needs a live
+environment gets a marker the default lane deselects (`-m "not e2e"`), not a skip.
+
+For a known failure, use `xfail(strict=True)` and name what fixes it. `strict=True` turns an
+unexpected pass into a failure, which is how you learn the bug is fixed:
 
 ```python
-@pytest.mark.skip(reason="needs the staging Redis; see CONTRIBUTING.md")
+@pytest.mark.xfail(strict=True, reason="parser drops a trailing tab; fixed by the tokenizer rewrite")
+def test_parse_keeps_a_trailing_tab() -> None:
+    assert parse("a\t") == ["a", ""]
 ```
-
-Use `@pytest.mark.xfail(strict=True)` for a known failure that the fix will turn green. `strict=True`
-turns an unexpected pass into a failure, which is how you learn the bug is fixed.
 
 ## Suite hygiene
 

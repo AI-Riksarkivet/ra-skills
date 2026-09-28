@@ -97,9 +97,15 @@ as in [`project-template.md`](project-template.md)):
   a key you leave unset falls through to the developer's own `.env`.
 
 ```python
+from collections.abc import Iterator
+
+import pytest
+from fastapi import FastAPI
+
+
 @pytest.fixture
-def app(monkeypatch: pytest.MonkeyPatch) -> Iterator[FastAPI]:
-    monkeypatch.setenv("DATABASE_URL", test_database_url)
+def app(monkeypatch: pytest.MonkeyPatch, database_url: str) -> Iterator[FastAPI]:
+    monkeypatch.setenv("DATABASE_URL", database_url)  # from a fixture that starts the throwaway store
     monkeypatch.setenv("SECRET_KEY", "test")
     from app.core.config import get_settings
 
@@ -175,9 +181,12 @@ body limits, how a real request's query string and body are parsed), run uvicorn
 ```python
 import threading
 import time
+from collections.abc import Iterator
 
 import httpx
+import pytest
 import uvicorn
+from fastapi import FastAPI
 
 
 @pytest.fixture
