@@ -1,405 +1,359 @@
 # Testing
 
-Tests use `pytest` + `pytest-asyncio` + `pytest-cov`. Coverage gate in CI: 80% repo-wide (`--cov-fail-under=80`); aim for 100% on new modules unless there's a written exception.
-
-This file is pytest **technique**. Project **wiring** (pytest config in `pyproject.toml`, markers, fixture layout) is owned by the `testing-python` skill — don't add config from here.
+pytest technique for any project. A project's own wiring (testpaths, markers, lanes, the fixtures it
+already ships) and its test policy live in that project's testing skill (rask: `testing-python`). A
+FastAPI app's client and lifespan: `fastapi` → `references/testing.md`.
 
 ## Contents
 
-- Install
-- Basic tests
+- What a test is for
+- Tiers
+- The shape of one test
 - Parametrize
 - Fixtures
-- Mocking
+- Doubles
 - Mocking HTTPX with `respx`
-- Async tests
-- Test organization
-- conftest.py
-- Integration tests
-- Coverage
-- F.I.R.S.T. principles
-- Test boundary conditions (T5)
-- Exhaustively test near bugs (T6)
-- One concept per test
-- `@pytest.mark.skip` is a question, not an answer
-- Guidelines
+- Async
+- Determinism and speed
+- Boundaries
+- `skip` and `xfail`
+- Suite hygiene
 
-## Install
+## What a test is for
 
-```bash
-uv add --dev pytest pytest-asyncio pytest-cov
-```
+Read this section before writing or deleting a test. Everything below it is technique.
 
-```bash
-uv run pytest -v
-uv run pytest --cov=src
-uv run pytest --cov=src --cov-fail-under=80
-```
+1. **Pin behaviour at a public interface.** Call what a caller calls (a function's return value, an
+   HTTP response, a row in the store) and assert what the caller sees.
+   Why: a test coupled to internals goes red on every refactor and stays green on real bugs. You pay
+   for it twice and it protects nothing.
 
-## Basic tests
+   ```python
+   # before: pins the implementation
+   def test_get_user(user_service, mock_repo):
+       mock_repo.get.return_value = User(id="123", name="Test")
+       user_service.get_user("123")
+       mock_repo.get.assert_called_once_with("123")
 
-```python
-import pytest
 
-def test_validate_email_valid():
-    assert validate_email("user@example.com") is None
+   # after: pins the behaviour, against a real in-memory repository
+   def test_get_user_returns_the_stored_user(repo: InMemoryUserRepository) -> None:
+       repo.save(User(id="123", name="Test"))
+       assert UserService(repo=repo).get_user("123") == User(id="123", name="Test")
+   ```
 
-def test_validate_email_empty():
-    with pytest.raises(ValidationError, match="email required"):
-        validate_email("")
+2. **Red.** A test earns its place when it goes red on a plausible bug and no other test already goes
+   red on that bug. Check this once, while writing. Either write the test before the fix and watch it
+   fail, or revert the fix, run the test, see it fail on the assertion that names the bug, and restore.
+   Why: a test that has never been red may be unable to fail (a wrong fixture, an assert on a mock you
+   configured yourself, a loop over nothing). A second test that fails on the same bug adds runtime
+   and maintenance, not protection. Don't ship a separate "control" test to prove the first one can
+   fail. The red check at write time is that proof.
+   Done when: red with the bug, green without it, and deleting the test would leave that bug uncaught.
 
-def test_validate_email_invalid():
-    with pytest.raises(ValidationError, match="invalid format"):
-        validate_email("invalid")
-```
+3. **Code shape belongs in a linter.** A rule about how code is written (a banned import or
+   decorator, a layer that must not import another) is a ruff rule or an import-linter contract. It
+   is not a test that reads source, parses an AST or greps docs.
+   Why: the linter checks every file on every run, reports the line, and ignores comments and strings.
+   A source-reading test stays green on a commented-out call, goes red on a harmless rename, and
+   executes no production code.
+
+   ```toml
+   # pyproject.toml: flags `from dataclasses import dataclass` and `@dataclasses.dataclass` (TID251)
+   [tool.ruff.lint]
+   extend-select = ["TID251"]
+
+   [tool.ruff.lint.flake8-tidy-imports.banned-api]
+   "dataclasses.dataclass".msg = "Structured values are pydantic BaseModel."
+   ```
+
+4. **Coverage is a map, not a target.** Read the missing lines on the paths that matter
+   (`--cov-report=term-missing`). Don't add tests to raise a percentage.
+   Why: a percentage rewards executing lines, not checking them. The cheapest way to raise it is a
+   test that asserts nothing.
+   Prune as you go. A test whose executed lines are a subset of another test's, with no assertion
+   the other lacks, is redundant. Delete it in the same change that adds its superset.
+
+## Tiers
+
+| Tier        | Drives                                                                             | Use for                                                              |
+| ----------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Unit        | one pure function or class; no I/O; milliseconds                                   | a pure function's distinct branches and boundaries                   |
+| Integration | real collaborators: the app over HTTP, a real throwaway store, a local server      | anything touching I/O, config, serialization or wiring: the keepers |
+| End-to-end  | the deployed system                                                                | the few paths that need the real deployment                          |
+
+When a unit test and an integration test go red on the same bugs, keep the integration test.
+Why: the integration test also catches the wiring, serialization and configuration bugs the unit test
+cannot see, so the unit test is the cheaper duplicate.
+
+## The shape of one test
+
+- **Arrange, Act, Assert, with exactly one Act.** Why: one Act means a failure names one behaviour. A
+  test with no Act (it only inspects objects, files or source) tests nothing that runs.
+- **One behaviour per test.** Several asserts on the result of one Act are fine.
+
+  ```python
+  # before: tests of attribute storage, which is Pydantic's behaviour, not yours
+  def test_user_stores_name():
+      assert User(name="A", email="a@x.io").name == "A"
+
+  def test_user_stores_email():
+      assert User(name="A", email="a@x.io").email == "a@x.io"
+
+
+  # after: the behaviours the class owns
+  def test_activate_marks_a_new_user_active() -> None:
+      user = User(name="A", email="a@x.io")
+      user.activate()
+      assert user.is_active
+
+
+  def test_activate_refuses_a_suspended_user() -> None:
+      user = User(name="A", email="a@x.io", suspended=True)
+      with pytest.raises(UserSuspendedError, match="suspended"):
+          user.activate()
+  ```
+
+- **Assert the exact value**: `assert result == {"id": 42, "name": "Ada"}`, not `"Ada" in str(result)`
+  or `len(result) > 0`. Use `pytest.raises(E, match=...)` for exceptions.
+  Why: a loose assert passes on wrong output. An exact one prints the diff when it fails.
+- **The name states condition and outcome**: `test_<unit>_<condition>_<outcome>`, lower case.
+  Why: the failure report is the name. History (`no_longer`, `still`) and emphasis (CAPS) say nothing
+  about behaviour.
 
 ## Parametrize
 
+- **One case per distinct branch or boundary.** Two cases that take the same path through the code
+  are one case.
+  Why: each extra case costs runtime and reads as coverage it does not add.
+- **Parametrize over inputs to the unit, never over the repository's files.**
+  Why: a case per source file grows with the tree and tests the tree, not the unit.
+- Give cases ids with `pytest.param(..., id=...)`. Stacked `@pytest.mark.parametrize` decorators
+  multiply into a cartesian product. Stack them only when every combination is a distinct branch.
+
 ```python
 @pytest.mark.parametrize(
-    "email,expected_error",
+    ("email", "error"),
     [
-        ("user@example.com", None),
-        ("", "email required"),
-        ("invalid", "invalid format"),
-        ("user@", "invalid format"),
+        pytest.param("", "email required", id="empty"),
+        pytest.param("user@", "invalid format", id="no-domain"),
     ],
 )
-def test_validate_email(email: str, expected_error: str | None):
-    if expected_error:
-        with pytest.raises(ValidationError, match=expected_error):
-            validate_email(email)
-    else:
-        assert validate_email(email) is None
+def test_validate_email_rejects(email: str, error: str) -> None:
+    with pytest.raises(ValidationError, match=error):
+        validate_email(email)
 ```
 
 ## Fixtures
 
-```python
-from unittest.mock import Mock
+- **Shared fixtures live in `conftest.py`**, and shared helpers in a plain (non-`test_`) module.
+  Never import from another `test_*.py` module.
+  Why: a test module is not a library. Importing one runs its module-level code and ties the import
+  to collection order. Under `--import-mode=importlib` it resolves only when an earlier import happened
+  to put its directory on `sys.path`, so it passes for the directory and fails for the single file.
+- **Scope by cost.** The default is `function` scope. Expensive read-only setup (a local server, a
+  rendered artefact, a large generated file) goes in `scope="module"` or `"session"`. Anything a test
+  mutates is reset by a function-scoped fixture layered on top.
+  Why: a mutable session fixture makes tests depend on order. Under pytest-xdist every worker builds its
+  own session fixtures, so a resource that must exist once per run needs a file lock.
+- **Factory fixtures** when a test needs several instances: return a builder, record what it built,
+  release it at teardown.
 
-@pytest.fixture
-def mock_repo():
-    return Mock(spec=UserRepository)
+  ```python
+  @pytest.fixture
+  def make_bucket(s3: S3Client) -> Iterator[Callable[[str], str]]:
+      made: list[str] = []
 
-@pytest.fixture
-def user_service(mock_repo):
-    return UserService(repo=mock_repo)
+      def _make(name: str) -> str:
+          s3.create_bucket(Bucket=name)
+          made.append(name)
+          return name
 
-def test_get_user(user_service, mock_repo):
-    mock_repo.get.return_value = User(id="123", name="Test")
+      yield _make
+      for name in made:
+          empty_and_delete(s3, name)
+  ```
 
-    result = user_service.get_user("123")
+- **`tmp_path` for files, `monkeypatch` for environment variables and attributes.** Both undo
+  themselves at teardown.
+  Why: a fixed path (`/tmp/x`) or a raw `os.environ[...] = ...` leaks into the next test and the next run.
+- **Order-independent.** Each test passes alone (`pytest path::test_name`) and under `-n`.
+  A test that passes only after another test ran is a bug in the test.
 
-    assert result.name == "Test"
-    mock_repo.get.assert_called_once_with("123")
-```
+## Doubles
 
-## Mocking
+- **Replace only what you do not own and cannot run locally**: a third-party API, a paid service,
+  the clock. Run your own code and cheap local infrastructure for real (an in-memory or `tmp_path`
+  store, a local server).
+  Why: a mock encodes your assumption about the collaborator. When the assumption is wrong, the mock
+  agrees with the bug.
+- **Prefer a fake to a mock.** A fake is a small working implementation (an in-memory repository) and
+  behaves consistently across every test that uses it. A `Mock` answers whatever each test told it.
+- **A double carries the whole signature**: `create_autospec(Real, instance=True)`, or a structural
+  fake passed through `typing.cast` to the real type. Build your own classes (settings, models) for
+  real with test values. Never stand them in with a `SimpleNamespace` or a `type(...)` object.
+  Why: a narrow stand-in cannot see the signature change it exists to catch. The test stays green while
+  production breaks.
+- **Patch where the name is used, not where it is defined.**
 
-```python
-from unittest.mock import Mock, patch
+  ```python
+  # app/orders.py does `from app.email import send_email`
+  monkeypatch.setattr("app.orders.send_email", fake_send)  # patches the name orders.py calls
+  monkeypatch.setattr("app.email.send_email", fake_send)   # no effect on orders.py
+  ```
 
-def test_with_mock():
-    mock_client = Mock()
-    mock_client.fetch.return_value = {"status": "ok"}
-
-    service = Service(client=mock_client)
-    result = service.process()
-
-    assert result == "ok"
-    mock_client.fetch.assert_called_once()
-
-@patch("mypackage.services.external_api")
-def test_with_patch(mock_api):
-    mock_api.call.return_value = {"data": "test"}
-
-    result = process_data()
-
-    assert result == "test"
-```
+  Why: `from x import y` binds a new name in the importing module. Patching the original leaves
+  that binding untouched.
+- **Assert an interaction only when the interaction is the contract**, such as an email sent or a
+  request made to a third party. Otherwise assert the result.
+  Why: `assert_called_once_with` on an internal collaborator pins the implementation.
 
 ## Mocking HTTPX with `respx`
 
-`unittest.mock` is wrong for HTTPX — patching `httpx.AsyncClient.get` skips the request lifecycle (URL building, headers, retries) and fails to catch bugs that surface only on the wire. Use **`respx`** instead — it intercepts at the transport layer, so your code goes through the real HTTPX request pipeline up to the point of sending.
-
-```bash
-uv add --dev respx
-```
-
-### The `respx_mock` fixture (default)
+`respx` intercepts at the HTTPX transport, so the code under test runs the real request pipeline (URL
+building, headers, auth, retries) up to the send. Patching `httpx.AsyncClient.get` skips all of it.
 
 ```python
 import httpx
 import pytest
 
 
+@pytest.mark.asyncio
 @pytest.mark.respx(base_url="https://api.example.com")
-async def test_get_user(respx_mock):
+async def test_get_user_returns_the_decoded_body(respx_mock) -> None:
     respx_mock.get("/users/42").mock(return_value=httpx.Response(200, json={"id": 42, "name": "Ada"}))
 
     async with httpx.AsyncClient(base_url="https://api.example.com") as client:
         r = await client.get("/users/42")
 
     assert r.json() == {"id": 42, "name": "Ada"}
-    assert respx_mock["/users/42"].called  # if named, or use route var
 ```
 
-`@pytest.mark.respx(...)` accepts `base_url=`, `assert_all_called=True/False`, `assert_all_mocked=True/False`. By default both asserts are on — every routed call must fire, and every unrouted call raises. That's usually what you want; flip `assert_all_mocked=False` for tests that only want to mock a subset.
+By default every routed call must fire (`assert_all_called=True`) and every unrouted call raises
+(`assert_all_mocked=True`). Pass `assert_all_mocked=False` to `@pytest.mark.respx(...)` only for a
+test that mocks a subset on purpose.
 
-### Side effects — callable / exception / iterable
+Side effects: a callable (inspect the request, build the response), an exception class
+(`side_effect=httpx.ConnectError` for a transport failure), or an iterable (one response per call,
+for retry tests):
 
 ```python
-import json
-
-# 1. Function side-effect — inspect the request, return a dynamic Response
-def _create_user(request: httpx.Request) -> httpx.Response:
-    payload = json.loads(request.content)
-    return httpx.Response(201, json={"id": 1, **payload})
-
-respx_mock.post("/users").mock(side_effect=_create_user)
-
-# 2. Exception side-effect — simulate a transport failure
-respx_mock.get("/flaky").mock(side_effect=httpx.ConnectError)
-
-# 3. Iterable side-effect — different response per call (for retry tests)
-respx_mock.get("/eventually-ok").mock(side_effect=[
-    httpx.Response(503),
-    httpx.Response(503),
-    httpx.Response(200, json={"ok": True}),
-])
+respx_mock.get("/eventually-ok").mock(side_effect=[httpx.Response(503), httpx.Response(200, json={"ok": True})])
 ```
 
-### Assertions via `route.calls`
+When the request is the contract, assert it through the route:
 
 ```python
 route = respx_mock.post("/orders").mock(return_value=httpx.Response(201))
-# ... exercise code that calls the API ...
-assert route.call_count == 1
+...  # exercise the code
 sent = route.calls.last.request
 assert sent.headers["Authorization"] == "Bearer test-token"
 assert sent.read() == b'{"item_id": 42}'
 ```
 
-### Without patching — `httpx.MockTransport`
+For code that takes its own `httpx.Client`, inject `httpx.MockTransport(router.handler)` from a
+`respx.Router()` and call `router.assert_all_called()` yourself.
 
-For unit tests that construct their own `httpx.Client` (not relying on a global), skip the patching machinery entirely:
+Rules:
 
-```python
-import respx
+- **Match exact URLs**: `respx_mock.get("/users/42")`, not a loose regex. A route that matches too
+  widely hides a wrongly built URL.
+- **One route per outbound call site.** Three endpoints, three routes.
+- A FastAPI route that calls out keeps its real HTTPX client and gets `respx`. See `fastapi` →
+  `references/testing.md`.
 
-router = respx.Router()
-router.get("https://api.example.com/health").respond(200)
+## Async
 
-def test_with_transport():
-    transport = httpx.MockTransport(router.handler)
-    with httpx.Client(transport=transport) as client:
-        assert client.get("https://api.example.com/health").status_code == 200
-    router.assert_all_called()  # explicit — no auto post-check in this style
-```
-
-### Rules
-
-- **Never `@patch("module.httpx_client.get")`** — patches a method, misses the request pipeline. Use `respx` so the code under test goes through real HTTPX up to the transport.
-- **Tight URL matching.** Prefer `respx_mock.get("/users/42")` over loose regexes — a route matching too widely hides bugs where the wrong URL gets built.
-- **One route per outbound call site.** If your service hits three endpoints, register three routes. Don't combine into one regex catch-all.
-- **For FastAPI route tests** that call external HTTPX clients, combine `respx_mock` with `app.dependency_overrides` for the `HttpDep`. See `fastapi/references/dependencies.md` § Overriding dependencies in tests.
-
-## Async tests
+pytest-asyncio's default is **strict mode**. A project may set `asyncio_mode = "auto"` in its pytest
+config, so check it. The explicit form below works in both modes:
 
 ```python
+from collections.abc import AsyncIterator
+
 import pytest
+import pytest_asyncio
 
-@pytest.mark.asyncio
-async def test_async_fetch():
-    result = await fetch_data("https://api.example.com")
-    assert result is not None
 
-@pytest.fixture
-async def async_client():
-    client = AsyncClient()
+@pytest_asyncio.fixture
+async def client() -> AsyncIterator[Client]:
+    client = await Client.connect()
     yield client
     await client.close()
 
+
 @pytest.mark.asyncio
-async def test_with_async_fixture(async_client):
-    result = await async_client.get("/users")
-    assert result.status == 200
+async def test_fetch_user_returns_the_user(client: Client) -> None:
+    assert await client.fetch_user(42) == User(id=42)
 ```
 
-Whether the `@pytest.mark.asyncio` marker is required per test or async mode is enabled globally (`asyncio_mode = "auto"`) is project wiring — in this repo async is explicit, not auto; see the `testing-python` skill before touching `pyproject.toml`.
+What each missing decorator does in strict mode (measured: pytest 9.1.1, pytest-asyncio 1.4.0):
 
-## Test organization
+| Written as                                          | Result                                                                                   |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `@pytest.fixture` on an `async def` fixture         | setup ERROR: "requested an async fixture … with no plugin or hook that handled it"       |
+| `async def test_…` with no `@pytest.mark.asyncio`   | FAILED: "async def functions are not natively supported"                                 |
 
-```
-tests/
-├── conftest.py          # Shared fixtures
-├── test_domain/
-│   └── test_user.py
-├── test_services/
-│   └── test_user_service.py
-└── test_integration/
-    └── test_api.py
-```
+A FastAPI app under test also needs its lifespan run. See `fastapi` → `references/testing.md`.
 
-## conftest.py
+## Determinism and speed
+
+- **No sleeping to wait for something.** Poll the condition against a deadline, wait on an
+  `asyncio.Event`/`threading.Event`, or inject the clock.
+  Why: a fixed sleep is too short on a loaded machine (flaky) and too long everywhere else (slow).
+- **Bound every wait**: client timeouts, broker connects, poll deadlines.
+  Why: an unbounded wait does not fail, it hangs, and a hung suite reports nothing.
+- **Pin every seed.** No real network in a unit test.
+- **A test that needs a tool fails when the tool is missing**, and the CI lane provides the tool.
+  Why: `skipif(tool missing)` is green everywhere the tool is absent, including the lane that should
+  run it.
+- **Measure before optimizing**: `pytest --durations=20`. Time `pytest --collect-only -q` on its own
+  to see import cost. Fix the slowest first.
+- **Parallel**: `pytest -n <N>` (pytest-xdist). Give a number inside containers.
+  Why: `-n auto` reads the host's cores, not the container's CPU quota.
+
+## Boundaries
+
+Bugs cluster at boundaries. For a function over a sequence or range, check: empty, a single element,
+exactly the limit, one over, zero or negative where positive is expected, and `None` where a value is
+expected. Each is a case only if it takes its own branch.
+
+When a bug is found, add the nearby cases that take a **different branch**, not every similar input:
 
 ```python
-import pytest
-
-@pytest.fixture
-def sample_user() -> User:
-    return User(id="123", name="Test", email="test@example.com")
-
-@pytest.fixture
-def db_session():
-    session = create_test_session()
-    yield session
-    session.rollback()
-    session.close()
+# The bug was leap-year February. Each case below is a distinct branch of the rule.
+@pytest.mark.parametrize(
+    ("year", "month", "last"),
+    [
+        pytest.param(2024, 1, 31, id="31-day-month"),
+        pytest.param(2024, 4, 30, id="30-day-month"),
+        pytest.param(2024, 2, 29, id="leap"),
+        pytest.param(2023, 2, 28, id="common"),
+        pytest.param(1900, 2, 28, id="century-common"),
+        pytest.param(2000, 2, 29, id="400-year-leap"),
+    ],
+)
+def test_last_day_of_month(year: int, month: int, last: int) -> None:
+    assert last_day_of_month(year, month) == last
 ```
 
-## Integration tests
+December is not added: it walks the same 31-day branch as January.
+
+## `skip` and `xfail`
+
+A skip is a question ("is this still valid?"). Fix the test or delete it. A skip that stays names
+what unblocks it:
 
 ```python
-@pytest.mark.integration
-def test_database_integration(db_session):
-    repo = UserRepository(db_session)
-
-    user = User(name="Test", email="test@example.com")
-    repo.save(user)
-
-    result = repo.get(user.id)
-    assert result.name == "Test"
+@pytest.mark.skip(reason="needs the staging Redis; see CONTRIBUTING.md")
 ```
 
-```bash
-uv run pytest -m integration
-uv run pytest -m "not integration"
-```
+Use `@pytest.mark.xfail(strict=True)` for a known failure that the fix will turn green. `strict=True`
+turns an unexpected pass into a failure, which is how you learn the bug is fixed.
 
-Marker names and registration are project wiring — this repo has **no `integration` marker**; see the `testing-python` skill for how integration tests are separated here. Keep the technique (isolate slow tests from the unit run), not this exact marker.
+## Suite hygiene
 
-## Coverage
-
-```bash
-uv run pytest --cov=src --cov-report=html
-uv run pytest --cov=src --cov-fail-under=80
-```
-
-## F.I.R.S.T. principles
-
-Every unit test should be:
-
-- **Fast** — under 100 ms. Slow tests get skipped; skipped tests rot. Hit real DBs/queues only in integration tests.
-- **Independent** — no order dependencies. A test that fails when run alone but passes after another test is a bug in the test.
-- **Repeatable** — same result every time, any environment. No clocks, no network, no random seeds without pinning.
-- **Self-validating** — `pytest` exits 0 or non-zero. Never "look at the output" tests.
-- **Timely** — written with the code, not weeks after. If you can't write the test, you don't understand the requirement yet.
-
-## Test boundary conditions (T5)
-
-Bugs cluster at boundaries — empty inputs, single elements, pagination edges, off-by-one. Test them explicitly, by name.
-
-```python
-def test_pagination_boundaries():
-    items = list(range(100))
-
-    # First page
-    assert paginate(items, page=1, size=10) == items[0:10]
-
-    # Last page
-    assert paginate(items, page=10, size=10) == items[90:100]
-
-    # Beyond last page
-    assert paginate(items, page=11, size=10) == []
-
-    # Page zero is invalid
-    with pytest.raises(ValueError):
-        paginate(items, page=0, size=10)
-
-    # Empty input
-    assert paginate([], page=1, size=10) == []
-```
-
-The boundary checklist worth running through for any function on a sequence/range:
-
-- Empty input
-- Single element
-- Exactly the limit
-- One over the limit
-- Negative / zero where positive is expected
-- `None` where a value is expected (and vice versa)
-
-## Exhaustively test near bugs (T6)
-
-When you find a bug, write tests for **every similar case**, not just the one that fired. Bugs cluster — if you missed a leap-year check, you probably also missed month-length edges.
-
-```python
-# Found bug: off-by-one in last_day_of_month for February in a leap year.
-# Don't just fix and add one test. Cover every month.
-def test_last_day_of_month():
-    assert last_day_of_month(2024,  1) == 31
-    assert last_day_of_month(2024,  2) == 29  # leap-year Feb
-    assert last_day_of_month(2023,  2) == 28  # non-leap Feb
-    assert last_day_of_month(2000,  2) == 29  # century leap (divisible by 400)
-    assert last_day_of_month(1900,  2) == 28  # century non-leap
-    assert last_day_of_month(2024,  4) == 30
-    assert last_day_of_month(2024, 12) == 31
-```
-
-The bug fix lasts because the surrounding cases are now proven, not just the one that broke prod.
-
-## One concept per test
-
-Don't bundle assertions about different concepts into one test. When it fails, the message should tell you exactly what broke.
-
-```python
-# BAD — one test, four concepts; the failure message tells you nothing
-def test_user():
-    user = User(name="Alice", email="alice@example.com")
-    assert user.name == "Alice"
-    assert user.email == "alice@example.com"
-    assert user.is_valid()
-    user.activate()
-    assert user.is_active
-
-# GOOD — one concept each, parametrize where shape repeats
-def test_user_stores_name():
-    assert User(name="Alice", email="alice@example.com").name == "Alice"
-
-def test_user_stores_email():
-    assert User(name="Alice", email="alice@example.com").email == "alice@example.com"
-
-def test_new_user_is_valid():
-    assert User(name="Alice", email="alice@example.com").is_valid()
-
-def test_user_can_be_activated():
-    user = User(name="Alice", email="alice@example.com")
-    user.activate()
-    assert user.is_active
-```
-
-Use `pytest.mark.parametrize` when you'd otherwise duplicate the body across cases — that's still "one concept", parameterized.
-
-## `@pytest.mark.skip` is a question, not an answer
-
-A skipped test marks an ambiguity ("is this still valid?"). Either fix it or delete it. If you genuinely have to skip, write _why_ and what unblocks it.
-
-```python
-# BAD
-@pytest.mark.skip(reason="flaky, fix later")
-def test_async_operation(): ...
-
-# OK — has a concrete unblock condition
-@pytest.mark.skip(reason="Requires the staging Redis; see CONTRIBUTING.md")
-def test_cache_invalidation(): ...
-```
-
-`@pytest.mark.xfail` is for tests that _currently_ fail in a known way and should start passing when the fix lands. Add a `strict=True` so an unexpected pass becomes a failure — that's how you find out the bug got fixed.
-
-## Guidelines
-
-- Descriptive test names — `test_<unit>_<scenario>_<expected_result>`.
-- Use fixtures for setup, not module-level state.
-- Test behavior, not implementation details.
+- **Register every marker and pass `--strict-markers`** (in `addopts`).
+  Why: without it a misspelled marker is only a warning, and `@pytest.mark.slwo` runs inside
+  `-m "not slow"` (measured).
+- **Autouse sparingly.** An autouse fixture runs for every test beneath its `conftest.py`. Keep it
+  to what every one of those tests needs.

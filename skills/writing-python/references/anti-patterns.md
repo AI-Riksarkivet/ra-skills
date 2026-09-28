@@ -190,7 +190,7 @@ These have dedicated references — going there avoids two-sources-of-truth drif
 
 - **Resources** (unclosed files/connections, blocking calls inside `async def`): see `resource-management.md` and the "Async patterns" section of `patterns.md`.
 - **Type safety** (missing hints, bare `list` / `dict`): see `type-safety.md`.
-- **Testing** (happy-path-only, over-mocking): see `testing.md`.
+- **Testing** (tests that pin implementation, over-mocking, redundant tests): see `testing.md` § What a test is for and § Doubles.
 
 The Quick review checklist below still tracks these for fast review without jumping files.
 

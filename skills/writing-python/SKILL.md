@@ -1,10 +1,10 @@
 ---
 name: writing-python
-description: Idiomatic Python 3.14+, Pydantic-first (not dataclasses), uv/ruff/ty toolchain. Use when writing or reviewing Python code — style, typing, design patterns, anti-patterns, error handling, resources, config, CLI, testing — or establishing project conventions. NOT for background jobs, retries, or observability (use `python-infrastructure`).
+description: Idiomatic Python 3.13+, Pydantic-first (not dataclasses), uv/ruff/ty toolchain. Use when writing, reviewing or testing Python code, or establishing a project's Python conventions. NOT for background jobs, retries, or observability (use `python-infrastructure`).
 allowed-tools: Read, Bash, Grep, Glob
 ---
 
-# Writing Python (3.14+)
+# Writing Python
 
 Language-level Python for this project.
 
@@ -21,15 +21,15 @@ Language-level Python for this project.
 | Load env vars, set up `pydantic-settings`, validate config at boot         | `references/configuration.md`       |
 | Look up everyday patterns (project layout, async, functools caching/dispatch, pathlib, logging) | `references/patterns.md`            |
 | Build a CLI (`typer`, output formats, progress, exit codes)                | `references/cli.md`                 |
-| Write tests with `pytest` (fixtures, async, parametrize, coverage)         | `references/testing.md`             |
+| Write, review or delete a test — what earns a place, tiers, fixtures, doubles, async, parametrize | `references/testing.md` |
 
 ## House style — non-negotiable
 
-- **Pydantic, not dataclasses.** Every structured value object is a `BaseModel`. Settings are `pydantic-settings.BaseSettings`. Don't reach for `@dataclass`.
+- **Pydantic, not dataclasses.** Every structured value object is a `BaseModel`. Settings are `pydantic-settings.BaseSettings`. A project enforces this with ruff `banned-api` on `dataclasses.dataclass` (`references/testing.md` § What a test is for), never with a test that greps source.
 - **Type hints on every public signature.** `ty` runs in CI; untyped code fails.
-- **`uv` for everything Python-level.** Don't use `pip`/`poetry`/`pyenv` directly.
-- **`ruff` for lint + format.** Don't add `black`/`isort`/`flake8`.
-- **`ty` for type checking.** Don't add `mypy`/`pyright`. CI runs `uvx ty check`.
+- **`uv` for everything Python-level**: environments, dependencies, the interpreter.
+- **`ruff` for lint + format.**
+- **`ty` for type checking.** CI runs `uvx ty check`.
 - **Stdlib first.** Only add a dep when stdlib genuinely doesn't fit (e.g. `httpx` for async HTTP, `typer`/`rich` for CLIs, `pydantic` for validation).
 - **Fail fast.** Validate at boundaries; raise informative errors immediately.
 - **Self-documenting code, not noise comments.** Comment only the non-obvious _why_; the default is no comment. See `references/code-style.md`.
@@ -71,29 +71,29 @@ uvx ruff format .          # format
 uvx ty check               # type-check
 
 uv run pytest -v           # tests (project-aware — pytest must import your package)
-uv run pytest --cov=src    # tests + coverage
+uv run pytest --cov        # coverage; sources come from [tool.coverage.run]
 uv run fastapi dev         # FastAPI app, when applicable
 ```
 
 **Rule of thumb**: `uvx <tool>` for tools that only need the file (`ruff`, `ty`); `uv run <tool>` for tools that need your project's environment (`pytest`, `fastapi`, anything that imports your code).
 
-## Python 3.14 features worth knowing
+## Version-gated features: check `requires-python` first
 
-- **Template strings** — `t"Hello {name}"` returns a `Template` object (use for SQL/HTML where literal interpolation is unsafe).
-- **`except` without parens** — `except ValueError, TypeError:` is valid.
-- **`concurrent.interpreters`** — true parallelism via subinterpreters.
-- **`compression.zstd`** — Zstandard in stdlib.
-- **Free-threaded build (PEP 703)** — no GIL, opt-in.
+On 3.13 each 3.14 row is a SyntaxError or an ImportError, so a project on `>=3.13` cannot use them.
+
+- **3.14: template strings** — `t"Hello {name}"` returns a `Template` object (use for SQL/HTML where literal interpolation is unsafe).
+- **3.14: `except` without parens** — `except ValueError, TypeError:` (PEP 758).
+- **3.14: `concurrent.interpreters`** — true parallelism via subinterpreters.
+- **3.14: `compression.zstd`** — Zstandard in stdlib.
+- **3.13+: free-threaded build (PEP 703)** — no GIL, opt-in; experimental in 3.13, supported from 3.14.
 
 ## Cross-skill boundaries
 
 - **`python-infrastructure`** — what to do when the function above needs to retry across a network boundary, run in a worker, or be observable in prod.
 - **`fastapi`** — HTTP routing, dependency injection, async-vs-sync runtime semantics, FastAPI/Pydantic conventions.
-- **`testing-python`** — this repo's pytest wiring (config, markers, fixture layout); `references/testing.md` here covers technique only.
+- **A project's testing skill** (rask: `testing-python`) — its test policy and pytest wiring (testpaths, markers, lanes, the fixtures it ships). `references/testing.md` here is the technique.
 - **`astral:uv`** / **`astral:ruff`** / **`astral:ty`** — deep tool reference for the toolchain.
 
 ## Top gotchas
 
-- **Mutable default arguments share state** — `def f(x=[]):` reuses the same list across calls. Use `x: list | None = None` and create inside.
-- **`assert` is stripped by `python -O`** — never use for runtime validation; only for code-internal invariants.
 - **Pydantic API surface to remember** — `model_dump` / `model_validate` / `model_dump_json` / `model_validate_json`, `Field(alias=..., default_factory=...)`, `model_config = {...}`, `@field_validator` / `@model_validator`. Don't paste snippets using `dict()`, `parse_obj()`, `Config` class, or `@validator` — those are from an older API and won't work.
