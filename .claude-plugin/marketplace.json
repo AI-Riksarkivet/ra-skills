@@ -66,7 +66,7 @@
       "name": "testing-python",
       "source": "./skills/testing-python",
       "skills": "./",
-      "description": "pytest for the rask suite — importlib import-mode, explicit testpaths, the slow marker, async + respx HTTP mocking."
+      "description": "rask's test policy and pytest wiring — integration tests as keepers, the red check, what stands in for Lance/S3/NATS/Ray/OpenFGA, which lane runs what, and pruning redundant tests."
     },
     {
       "name": "python-infrastructure",
