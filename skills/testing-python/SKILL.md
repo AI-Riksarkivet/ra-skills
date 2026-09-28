@@ -1,6 +1,6 @@
 ---
 name: testing-python
-description: pytest at the suite level — collection and markers (--strict-markers, testpaths, the skip list), parallel runs with pytest-xdist, hang limits, --durations, the red check that proves a new test can fail, and pruning redundant tests with per-test coverage. Use when a test does not collect or runs in no lane, when a suite is slow, hangs or fails only under -n, when proving a test goes red, or when auditing or pruning a suite.
+description: pytest at the suite level — collection and markers (strict markers, testpaths, the skip list), parallel runs with pytest-xdist, hang limits, --durations, the red check that proves a new test can fail, and pruning redundant tests with per-test coverage. Use when a test does not collect or runs in no lane, when a suite is slow, hangs or fails only under -n, when proving a test goes red, or when auditing or pruning a suite.
 ---
 
 # Testing Python: the suite
@@ -42,8 +42,10 @@ and no other test went red on the revert.
 
 ## Collection and markers
 
-- **Register every marker and put `--strict-markers` in `addopts`.** Without it a misspelled marker is
-  only a warning, and `@pytest.mark.slwo` runs inside `-m "not slow"` (measured, pytest 9.1.1).
+- **Register every marker and set `strict_markers = true` in the pytest config.** Without it a
+  misspelled marker is only a warning, and `@pytest.mark.slwo` runs inside `-m "not slow"` (measured,
+  pytest 9.1.1). `strict = true` sets it along with `strict_config`, `strict_xfail` and
+  `strict_parametrization_ids`. Before pytest 9 the only form is `--strict-markers` in `addopts`.
 - **With `testpaths` set, a bare `pytest` collects only those directories.** A new package's `tests/`
   runs once it is added to the list. Adding the directory is part of adding the package.
 - **Run each lane with `-rs` and read the skip reasons.** A skipped test ran nowhere. A skip for a
@@ -65,9 +67,14 @@ and no other test went red on the revert.
 - **Each xdist worker is its own process.** Session fixtures and `functools.cache` build once per
   worker, not once per run. A resource that must exist once per run needs a file lock
   (`writing-python` → `references/testing.md` § Fixtures).
-- **A per-test ceiling in CI**: pytest-timeout with `--timeout=<s> --timeout-method=thread`. A hung test
-  then fails and prints every thread's stack, instead of stalling the job with no output. Set the
-  ceiling far above the suite's runtime: it detects hangs, it is not a speed budget.
+- **A per-test ceiling in CI**: pytest-timeout, `--timeout=<s>`. Set it far above the slowest test: it
+  detects hangs, it is not a speed budget. Pick the method by what it does on expiry (measured,
+  pytest-timeout 2.4.0):
+  - `--timeout-method=signal` (the POSIX default) fails the test and the run continues. Python runs
+    the handler between bytecodes, so C code that never checks for signals can outlast it.
+  - `--timeout-method=thread` fires whatever the test is blocked in, prints every thread's stack, and
+    ends the process. In one process the run stops there, with no summary. Under `-n`, only that
+    worker dies, the test is reported failed, and the run continues.
 
 ## Pruning a suite
 

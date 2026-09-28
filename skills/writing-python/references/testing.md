@@ -1,6 +1,6 @@
 # Testing
 
-How to write one test, in any project. The suite as a whole (markers and `--strict-markers`,
+How to write one test, in any project. The suite as a whole (markers and `strict_markers`,
 parallel runs, `--durations`, the red-check recipe, pruning) is `testing-python`. A FastAPI app's
 client and lifespan: `fastapi` → `references/testing.md`. A project's own wiring (which directories,
 which lanes, the fixtures it already ships) lives in that project's skill.
@@ -243,11 +243,12 @@ building, headers, auth, retries) up to the send. Patching `httpx.AsyncClient.ge
 ```python
 import httpx
 import pytest
+import respx
 
 
 @pytest.mark.asyncio
 @pytest.mark.respx(base_url="https://api.example.com")
-async def test_get_user_returns_the_decoded_body(respx_mock) -> None:
+async def test_get_user_returns_the_decoded_body(respx_mock: respx.MockRouter) -> None:
     respx_mock.get("/users/42").mock(return_value=httpx.Response(200, json={"id": 42, "name": "Ada"}))
 
     async with httpx.AsyncClient(base_url="https://api.example.com") as client:

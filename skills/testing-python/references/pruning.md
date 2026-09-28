@@ -67,6 +67,31 @@ Cases that walk the same lines are one case, except the two sides of a boundary:
 `n == limit + 1` can walk the same comparison, and each catches a different off-by-one. A shared line
 set makes a candidate; step 4's red check is the verdict.
 
+Save this as `$S/twins.py`. `uv run python $S/twins.py $S/cov.json` prints each test whose `|run` lines
+lie within another test's:
+
+```python
+import json
+import sys
+from collections import defaultdict
+from pathlib import Path
+
+cov = json.loads(Path(sys.argv[1]).read_text())
+ran: dict[str, set[tuple[str, str]]] = defaultdict(set)
+for path, f in cov["files"].items():
+    for line, contexts in f["contexts"].items():
+        for c in contexts:
+            if c.endswith("|run"):
+                ran[c.removesuffix("|run")].add((path, line))
+for a, lines_a in ran.items():
+    for b, lines_b in ran.items():
+        if a != b and lines_a <= lines_b and (lines_a < lines_b or a < b):  # an equal pair prints once
+            print(f"{a}\n    within {b}")
+```
+
+The list is candidates, not verdicts: a test on a narrow path often sits within a broader one and
+still asserts something the broader test does not. Read both tests' asserts before deleting either.
+
 ## 4. Prove nothing was lost
 
 - **The union of executed production lines must not shrink.** Save this as `$S/union.py`, then run it

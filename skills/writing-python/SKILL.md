@@ -32,6 +32,7 @@ Language-level Python for this project.
 - **`ty` for type checking.** CI runs `uvx ty check`.
 - **Stdlib first.** Only add a dep when stdlib genuinely doesn't fit (e.g. `httpx` for async HTTP, `typer`/`rich` for CLIs, `pydantic` for validation).
 - **Fail fast.** Validate at boundaries; raise informative errors immediately.
+- **Integration tests are the keepers.** Test I/O and glue through real collaborators; delete a unit test an integration test already covers; a test that reads source, an AST or prose is not a test. `references/testing.md` § What a test is for.
 - **Self-documenting code, not noise comments.** Comment only the non-obvious _why_; the default is no comment. See `references/code-style.md`.
 
 ## Quick patterns
@@ -91,7 +92,7 @@ On 3.13 each 3.14 row is a SyntaxError or an ImportError, so a project on `>=3.1
 
 - **`python-infrastructure`** — what to do when the function above needs to retry across a network boundary, run in a worker, or be observable in prod.
 - **`fastapi`** — HTTP routing, dependency injection, async-vs-sync runtime semantics, FastAPI/Pydantic conventions.
-- **`testing-python`** — the suite as a whole: markers and `--strict-markers`, parallel runs, `--durations`, the red-check recipe, pruning. `references/testing.md` here is one test. A project's own wiring (directories, lanes, the fixtures it ships) lives in that project's skill.
+- **`testing-python`** — the suite as a whole: markers and `strict_markers`, parallel runs, `--durations`, the red-check recipe, pruning. `references/testing.md` here is one test. A project's own wiring (directories, lanes, the fixtures it ships) lives in that project's skill.
 - **`astral:uv`** / **`astral:ruff`** / **`astral:ty`** — deep tool reference for the toolchain.
 
 ## Top gotchas

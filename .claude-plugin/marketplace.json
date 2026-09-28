@@ -66,7 +66,7 @@
       "name": "testing-python",
       "source": "./skills/testing-python",
       "skills": "./",
-      "description": "pytest at the suite level — markers and --strict-markers, xdist, --durations and hang limits, the red check that proves a test can fail, and pruning redundant tests with per-test coverage."
+      "description": "pytest at the suite level — markers and strict markers, xdist, --durations and hang limits, the red check that proves a test can fail, and pruning redundant tests with per-test coverage."
     },
     {
       "name": "python-infrastructure",
