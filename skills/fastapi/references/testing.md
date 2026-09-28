@@ -1,8 +1,9 @@
 # Testing a FastAPI app
 
-What changes when the code under test is a FastAPI app. Generic pytest craft (what earns a test,
-tiers, doubles, the async decorators) is in `writing-python` → `references/testing.md`. A project's own
-test wiring is in its project skill (rask: `testing-python`).
+What changes when the code under test is a FastAPI app. One test in general (what earns it a place,
+tiers, doubles, the async decorators) is `writing-python` → `references/testing.md`. The suite as a
+whole (markers, parallel runs, the red-check recipe, pruning) is `testing-python`. A project's own
+wiring and fixtures live in that project's skill.
 
 ## Contents
 

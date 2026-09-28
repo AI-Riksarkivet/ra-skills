@@ -91,7 +91,7 @@ On 3.13 each 3.14 row is a SyntaxError or an ImportError, so a project on `>=3.1
 
 - **`python-infrastructure`** — what to do when the function above needs to retry across a network boundary, run in a worker, or be observable in prod.
 - **`fastapi`** — HTTP routing, dependency injection, async-vs-sync runtime semantics, FastAPI/Pydantic conventions.
-- **A project's testing skill** (rask: `testing-python`) — its test policy and pytest wiring (testpaths, markers, lanes, the fixtures it ships). `references/testing.md` here is the technique.
+- **`testing-python`** — the suite as a whole: markers and `--strict-markers`, parallel runs, `--durations`, the red-check recipe, pruning. `references/testing.md` here is one test. A project's own wiring (directories, lanes, the fixtures it ships) lives in that project's skill.
 - **`astral:uv`** / **`astral:ruff`** / **`astral:ty`** — deep tool reference for the toolchain.
 
 ## Top gotchas

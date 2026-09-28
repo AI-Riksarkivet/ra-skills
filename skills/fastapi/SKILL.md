@@ -45,10 +45,10 @@ Single source of truth in sibling skills + linked references: **`uv` / `ruff` / 
 
 ## Cross-skill boundaries
 
-- **`writing-python`** — language style, type safety, Pydantic, uv/ruff/ty. This skill — _what changes when the code is a FastAPI route_.
+- **`writing-python`** — language style, type safety, Pydantic, uv/ruff/ty, and one test (`references/testing.md`: what earns a test its place, doubles, the async decorators). This skill — _what changes when the code is a FastAPI route_; its [`testing.md`](references/testing.md) is only what changes for a FastAPI app.
+- **`testing-python`** — the suite as a whole: markers, parallel runs, the red-check recipe, pruning.
 - **`python-infrastructure`** — NATS JetStream consumers, Dapr Workflow, retry/backoff, OTel conventions, Redis fundamentals. This skill links out for the cross-cutting concerns.
 - **`otel`** — full OTel SDK reference. [`observability.md`](references/observability.md) only pins the FastAPI-specific bits on top.
-- **`writing-python`** → `references/testing.md` — generic pytest craft and the async decorators. A project's own test wiring and policy lives in its project skill (rask: `testing-python`). [`testing.md`](references/testing.md) here is only what changes for a FastAPI app.
 
 ## Top gotchas
 

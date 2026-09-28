@@ -1,8 +1,9 @@
 # Testing
 
-pytest technique for any project. A project's own wiring (testpaths, markers, lanes, the fixtures it
-already ships) and its test policy live in that project's testing skill (rask: `testing-python`). A
-FastAPI app's client and lifespan: `fastapi` → `references/testing.md`.
+How to write one test, in any project. The suite as a whole (markers and `--strict-markers`,
+parallel runs, `--durations`, the red-check recipe, pruning) is `testing-python`. A FastAPI app's
+client and lifespan: `fastapi` → `references/testing.md`. A project's own wiring (which directories,
+which lanes, the fixtures it already ships) lives in that project's skill.
 
 ## Contents
 
@@ -14,10 +15,9 @@ FastAPI app's client and lifespan: `fastapi` → `references/testing.md`.
 - Doubles
 - Mocking HTTPX with `respx`
 - Async
-- Determinism and speed
+- Determinism
 - Boundaries
 - `skip` and `xfail`
-- Suite hygiene
 
 ## What a test is for
 
@@ -44,7 +44,8 @@ Read this section before writing or deleting a test. Everything below it is tech
 
 2. **Red.** A test earns its place when it goes red on a plausible bug and no other test already goes
    red on that bug. Check this once, while writing. Either write the test before the fix and watch it
-   fail, or revert the fix, run the test, see it fail on the assertion that names the bug, and restore.
+   fail, or revert the fix, run the test, see it fail on the assertion that names the bug, and restore
+   (the recipe, with its stale-bytecode trap: `testing-python` § The red check).
    Why: a test that has never been red may be unable to fail (a wrong fixture, an assert on a mock you
    configured yourself, a loop over nothing). A second test that fails on the same bug adds runtime
    and maintenance, not protection. Don't ship a separate "control" test to prove the first one can
@@ -52,8 +53,9 @@ Read this section before writing or deleting a test. Everything below it is tech
    Done when: red with the bug, green without it, and deleting the test would leave that bug uncaught.
 
 3. **Code shape belongs in a linter.** A rule about how code is written (a banned import or
-   decorator, a layer that must not import another) is a ruff rule or an import-linter contract. It
-   is not a test that reads source, parses an AST or greps docs.
+   decorator, a layer that must not import another) is a ruff rule or an import-linter contract, or
+   it is nowhere. It is not a test that reads source text, parses an AST, greps prose or docs, or
+   checks file names.
    Why: the linter checks every file on every run, reports the line, and ignores comments and strings.
    A source-reading test stays green on a commented-out call, goes red on a harmless rename, and
    executes no production code.
@@ -72,7 +74,25 @@ Read this section before writing or deleting a test. Everything below it is tech
    Why: a percentage rewards executing lines, not checking them. The cheapest way to raise it is a
    test that asserts nothing.
    Prune as you go. A test whose executed lines are a subset of another test's, with no assertion
-   the other lacks, is redundant. Delete it in the same change that adds its superset.
+   the other lacks, is redundant. Delete it in the same change that adds its superset. Pruning a
+   whole suite: `testing-python` → `references/pruning.md`.
+
+5. **What fails rules 1 to 3 is not a test.** Delete it on sight; write the behavioural test instead.
+   - A **change-detector** pins how the code is written now (an internal call sequence, a private
+     structure, a snapshot of a representation no caller reads). It goes red on every refactor and
+     on no bug.
+   - A **tautology** asserts what it arranged itself: patch `f` to return 5, assert `f` returns 5.
+     It cannot go red.
+   - A **mock-call-only** test's sole assertion is `assert_called_*` on a collaborator you own. Assert
+     the result the caller sees (§ Doubles for when the call is the contract).
+   - A **reader** of source, an AST, prose, docs or file names, including a check that a deleted
+     file, name or sentence is still absent. Rule 3: a linter, or nowhere.
+
+6. **Change the test that already drives the code before adding one.** Search the suite for the
+   function or route under change, and extend or replace the test you find. Add a new test only when
+   none drives that code.
+   Why: a second test beside the first is the redundancy of rule 2, written on purpose.
+   Done when: you can name the test you changed or replaced, or you have searched and none exists.
 
 ## Tiers
 
@@ -82,7 +102,9 @@ Read this section before writing or deleting a test. Everything below it is tech
 | Integration | real collaborators: the app over HTTP, a real throwaway store, a local server      | anything touching I/O, config, serialization or wiring: the keepers |
 | End-to-end  | the deployed system                                                                | the few paths that need the real deployment                          |
 
-When a unit test and an integration test go red on the same bugs, keep the integration test.
+I/O and glue code (routes, adapters, config, anything that talks to a store or a service) is tested
+through real collaborators, never through a unit test of its parts. When a unit test covers what an
+integration test covers, delete the unit test.
 Why: the integration test also catches the wiring, serialization and configuration bugs the unit test
 cannot see, so the unit test is the cheaper duplicate.
 
@@ -178,6 +200,8 @@ def test_validate_email_rejects(email: str, error: str) -> None:
 - **`tmp_path` for files, `monkeypatch` for environment variables and attributes.** Both undo
   themselves at teardown.
   Why: a fixed path (`/tmp/x`) or a raw `os.environ[...] = ...` leaks into the next test and the next run.
+- **Autouse sparingly.** An autouse fixture runs for every test beneath its `conftest.py`. Keep it to
+  what every one of those tests needs.
 - **Order-independent.** Each test passes alone (`pytest path::test_name`) and under `-n`.
   A test that passes only after another test ran is a bug in the test.
 
@@ -298,21 +322,23 @@ What each missing decorator does in strict mode (measured: pytest 9.1.1, pytest-
 
 A FastAPI app under test also needs its lifespan run. See `fastapi` → `references/testing.md`.
 
-## Determinism and speed
+## Determinism
 
 - **No sleeping to wait for something.** Poll the condition against a deadline, wait on an
   `asyncio.Event`/`threading.Event`, or inject the clock.
   Why: a fixed sleep is too short on a loaded machine (flaky) and too long everywhere else (slow).
-- **Bound every wait**: client timeouts, broker connects, poll deadlines.
+- **Bound every wait**: client timeouts, broker connects, poll deadlines, and exporters flushed at
+  exit. A real OTLP exporter pointed at an endpoint nothing serves waits out its timeout (the SDK
+  default is 10 s) when the process exits, so a suite that builds real exporters sets
+  `OTEL_EXPORTER_OTLP_TIMEOUT` low (measured on one suite: 10.2 s, and 3.1 s with the cap).
   Why: an unbounded wait does not fail, it hangs, and a hung suite reports nothing.
 - **Pin every seed.** No real network in a unit test.
 - **A test that needs a tool fails when the tool is missing**, and the CI lane provides the tool.
   Why: `skipif(tool missing)` is green everywhere the tool is absent, including the lane that should
   run it.
-- **Measure before optimizing**: `pytest --durations=20`. Time `pytest --collect-only -q` on its own
-  to see import cost. Fix the slowest first.
-- **Parallel**: `pytest -n <N>` (pytest-xdist). Give a number inside containers.
-  Why: `-n auto` reads the host's cores, not the container's CPU quota.
+
+Speed (`--durations`, xdist, per-test timeouts) is a property of the suite: `testing-python`
+§ Speed and hangs.
 
 ## Boundaries
 
@@ -354,11 +380,3 @@ unexpected pass into a failure, which is how you learn the bug is fixed:
 def test_parse_keeps_a_trailing_tab() -> None:
     assert parse("a\t") == ["a", ""]
 ```
-
-## Suite hygiene
-
-- **Register every marker and pass `--strict-markers`** (in `addopts`).
-  Why: without it a misspelled marker is only a warning, and `@pytest.mark.slwo` runs inside
-  `-m "not slow"` (measured).
-- **Autouse sparingly.** An autouse fixture runs for every test beneath its `conftest.py`. Keep it
-  to what every one of those tests needs.
