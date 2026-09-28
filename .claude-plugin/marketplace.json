@@ -60,7 +60,7 @@
       "name": "fastapi",
       "source": "./skills/fastapi",
       "skills": "./",
-      "description": "FastAPI best practices, conventions, and production project templates. Use when writing, reviewing, or refactoring FastAPI or Pydantic API code, when scaffolding a new FastAPI project, or when building any new Python HTTP/REST service (FastAPI is the house standard)."
+      "description": "FastAPI best practices, conventions, and production project templates. Use when writing, reviewing, refactoring or testing FastAPI or Pydantic API code, when scaffolding a new FastAPI project, or when building any new Python HTTP/REST service (FastAPI is the house standard)."
     },
     {
       "name": "testing-python",

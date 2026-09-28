@@ -90,7 +90,7 @@ RedisDep = Annotated[redis.Redis, Depends(get_redis)]
 
 Routes consume `RedisDep`. Never read `request.app.state.redis` directly — testing breaks.
 
-Override in tests via `app.dependency_overrides[get_redis] = lambda: fake_redis` ([`dependencies.md`](dependencies.md) § Overriding dependencies in tests).
+Override in tests via `app.dependency_overrides[get_redis] = lambda: fake_redis` ([`testing.md`](testing.md) § Overriding dependencies).
 
 ## Use 1 — Cache (`cache_aside`)
 

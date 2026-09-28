@@ -1,11 +1,11 @@
 ---
 name: fastapi
-description: FastAPI best practices, conventions, and production project templates. Use when writing, reviewing, or refactoring FastAPI or Pydantic API code, when scaffolding a new FastAPI project, or when building any new Python HTTP/REST service (FastAPI is the house standard).
+description: FastAPI best practices, conventions, and production project templates. Use when writing, reviewing, refactoring or testing FastAPI or Pydantic API code, when scaffolding a new FastAPI project, or when building any new Python HTTP/REST service (FastAPI is the house standard).
 ---
 
 # FastAPI
 
-FastAPI is the project standard for HTTP services. **Flask / Django / Starlette-direct aren't used here** — pick FastAPI for any new HTTP service unless you're writing a non-HTTP CLI (use `typer` instead, see `writing-python`).
+FastAPI is the project standard for every HTTP service. A non-HTTP CLI uses `typer` (see `writing-python`).
 
 Routing index. Each topic links to a reference with full patterns and code. New projects start at [`project-template.md`](references/project-template.md); day-to-day code-style rules live in [`core-conventions.md`](references/core-conventions.md).
 
@@ -14,8 +14,9 @@ Routing index. Each topic links to a reference with full patterns and code. New 
 | If you're working on… | Read |
 | --------------------- | ---- |
 | **Day-to-day route / model / DI style** (`Annotated`, no `...`, `response_model`, async vs sync, `StrEnum`, no `RootModel`, one HTTP op per function, `fastapi` CLI) | [`core-conventions.md`](references/core-conventions.md) |
-| **Scaffolding a new project** — layered layout, settings, repository/service/endpoint patterns, auth wiring, tests | [`project-template.md`](references/project-template.md) |
-| **Dependency injection** — `yield`/`scope`, sub-dependency chains, per-request caching + `use_cache=False`, class deps, `app.dependency_overrides` for testing | [`dependencies.md`](references/dependencies.md) |
+| **Scaffolding a new project** — layered layout, settings, repository/service/endpoint patterns, auth wiring | [`project-template.md`](references/project-template.md) |
+| **Dependency injection** — `yield`/`scope`, sub-dependency chains, per-request caching + `use_cache=False`, class deps | [`dependencies.md`](references/dependencies.md) |
+| **Testing** — which client runs the lifespan (`with TestClient`, `LifespanManager`), a per-test app and settings pinned before import, `dependency_overrides` vs `respx`, a real store, the error body, a live uvicorn for wire claims | [`testing.md`](references/testing.md) |
 | **Production wiring** — lifespan (`@asynccontextmanager`, never `on_event`), graceful shutdown, DI via `app.state`, middleware (CORS → RequestID → Timing → Logging), `ContextVar`, hiding `/docs` in prod | [`production-patterns.md`](references/production-patterns.md) |
 | **Exception handlers** — `DomainError` hierarchy, RFC 9457 Problem Details, `RequestValidationError` override, `RateLimitError` + `Retry-After` | [`exception-handlers.md`](references/exception-handlers.md) |
 | **Health checks** — `/livez` + `/readyz`, healthy / degraded / unhealthy states, per-component reporting, `startup_complete` / `shutting_down` flags from lifespan | [`health-checks.md`](references/health-checks.md) |
@@ -47,6 +48,7 @@ Single source of truth in sibling skills + linked references: **`uv` / `ruff` / 
 - **`writing-python`** — language style, type safety, Pydantic, uv/ruff/ty. This skill — _what changes when the code is a FastAPI route_.
 - **`python-infrastructure`** — NATS JetStream consumers, Dapr Workflow, retry/backoff, OTel conventions, Redis fundamentals. This skill links out for the cross-cutting concerns.
 - **`otel`** — full OTel SDK reference. [`observability.md`](references/observability.md) only pins the FastAPI-specific bits on top.
+- **`writing-python`** → `references/testing.md` — generic pytest craft and the async decorators. A project's own test wiring and policy lives in its project skill (rask: `testing-python`). [`testing.md`](references/testing.md) here is only what changes for a FastAPI app.
 
 ## Top gotchas
 
@@ -55,3 +57,4 @@ Single source of truth in sibling skills + linked references: **`uv` / `ruff` / 
 - **`--workers N` inside a Kubernetes pod** multiplies pools and lifespan runs. One worker per pod, scale via `replicas:`. See [`kubernetes.md`](references/kubernetes.md) § Process model.
 - **`BackgroundTasks` for anything you'd page on** dies with the worker. Use NATS JetStream or Dapr Workflow. See [`anti-patterns.md`](references/anti-patterns.md).
 - **Authenticate WebSockets before `accept()`** — otherwise the socket is open and counted before you reject. See [`websockets.md`](references/websockets.md).
+- **`AsyncClient(transport=ASGITransport(app=app))` never runs the lifespan**, and neither does `TestClient(app)` without `with`. Everything the lifespan builds is missing from `app.state`. See [`testing.md`](references/testing.md) § Pick the client.

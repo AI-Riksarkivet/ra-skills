@@ -321,69 +321,13 @@ Place all of these in `core/` (not `api/`) so they're testable without spinning 
 
 ## Testing
 
-```python
-# tests/conftest.py
-import pytest
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from sqlmodel import SQLModel
-from sqlmodel.ext.asyncio.session import AsyncSession
-
-from app.api.dependencies import get_db
-from app.main import app
-
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
-
-
-@pytest.fixture
-async def db_session():
-    engine = create_async_engine(TEST_DATABASE_URL)
-    async with engine.begin() as conn:
-        # create_all is OK for ephemeral test DBs only — prod schema is Alembic's job.
-        await conn.run_sync(SQLModel.metadata.create_all)
-
-    AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
-    async with AsyncSessionLocal() as session:
-        yield session
-
-
-@pytest.fixture
-async def client(db_session: AsyncSession):
-    async def override_get_db():
-        yield db_session
-
-    app.dependency_overrides[get_db] = override_get_db
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
-    app.dependency_overrides.clear()
-```
-
-```python
-# tests/test_users.py
-import pytest
-
-
-@pytest.mark.asyncio
-async def test_create_user(client):
-    response = await client.post(
-        "/api/v1/users/",
-        json={
-            "email": "test@example.com",
-            "password": "testpass123",
-            "name": "Test User",
-        },
-    )
-    assert response.status_code == 201
-    data = response.json()
-    assert data["email"] == "test@example.com"
-    assert "id" in data
-```
+`tests/conftest.py` builds the app with the lifespan running (`with TestClient(app)`), pins settings
+before `app.main` is imported, overrides auth, and points the session at a real throwaway Postgres.
+The fixtures and the rules behind them are in [`testing.md`](testing.md).
 
 ## Common Pitfalls
 
 - Running blocking DB drivers inside `async def` handlers — use an async driver or a plain `def` handler.
 - Business logic inside route handlers — push it into `services/`.
 - Direct ORM access in routes — go through repositories.
-- Mutating `app.dependency_overrides` in tests without clearing it afterwards — leaks across tests.
 - Forgetting a return type or `response_model` — loses Pydantic-side filtering and serialization.

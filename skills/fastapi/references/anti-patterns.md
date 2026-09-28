@@ -10,6 +10,7 @@ For richer **code-level wrong-vs-right** examples on a given topic, the per-topi
 | Pagination           | [`pagination.md`](pagination.md) § Anti-patterns                 |
 | Exception handlers   | [`exception-handlers.md`](exception-handlers.md) § Rules         |
 | Files / uploads      | [`file-handling.md`](file-handling.md) § Anti-patterns           |
+| Tests                | [`testing.md`](testing.md)                                       |
 | Kubernetes / probes  | [`kubernetes.md`](kubernetes.md) § What NOT to do                |
 | Observability / OTel | [`observability.md`](observability.md) § What NOT to do          |
 | Authz / OpenFGA      | [`authz.md`](authz.md) (operational notes)                       |
@@ -23,7 +24,8 @@ For richer **code-level wrong-vs-right** examples on a given topic, the per-topi
 | `requests.get(...)` inside `async def`                                | Blocks the event loop — `requests` is sync.                     | `httpx.AsyncClient` or `await run_in_threadpool(requests.get, ...)`.                         |
 | `time.sleep`, `open()`, sync DB driver inside `async def`             | Same — blocks the loop, kills throughput.                       | Async equivalent: `asyncio.sleep`, `aiofiles`, async DB driver.                              |
 | `from jose import jwt`                                                | `python-jose` is largely unmaintained.                          | `import jwt` (PyJWT).                                                                        |
-| `from async_asgi_testclient import TestClient`                        | Unmaintained.                                                   | `httpx.AsyncClient` + `ASGITransport`.                                                       |
+| `from async_asgi_testclient import TestClient`                        | Unmaintained.                                                   | `with TestClient(app)`; for an async test, `AsyncClient` + `ASGITransport` under `LifespanManager` ([`testing.md`](testing.md)). |
+| `AsyncClient(transport=ASGITransport(app=app))` or `TestClient(app)` with no `with` | Neither runs the lifespan, so `app.state` is empty.   | `with TestClient(app)`, or `LifespanManager` ([`testing.md`](testing.md) § Pick the client). |
 | `model_config = ConfigDict(json_encoders={...})`                      | Deprecated in Pydantic v2.                                      | `@field_serializer` or `Annotated[T, PlainSerializer(...)]`.                                 |
 | `Field(ge=18, default=None)`                                          | Constraint contradicts the default.                             | Pick: required (`Field(ge=18)`) or optional (`int \| None = Field(default=None, ge=18)`).    |
 | `def get_user(id: int = Depends(...))` (default-arg form)             | Legacy; default-value gotchas.                                  | `user: Annotated[User, Depends(...)]`.                                                       |
@@ -33,7 +35,7 @@ For richer **code-level wrong-vs-right** examples on a given topic, the per-topi
 | Return a Pydantic model AND set `response_model=` to the same class   | Model gets constructed twice (validate + serialize).            | Either return the ORM row / dict and let `response_model` validate, or drop `response_model`. |
 | Deep cross-domain imports (`from src.auth.service.user import ...`)   | Tight coupling, hard to refactor.                               | `from src.auth import service as auth_service`.                                              |
 | One `BaseSettings` for the whole app                                  | Every domain reads every var; nothing is scoped.                | One `BaseSettings` per domain (`AuthConfig`, `DbConfig`, …).                                 |
-| Mocking the database in integration tests                             | Mock/prod divergence eventually fires in prod.                  | Real DB via testcontainers + ephemeral schema; `dependency_overrides` for auth.              |
+| Mocking the database in integration tests                             | Mock/prod divergence eventually fires in prod.                  | Real DB via testcontainers + ephemeral schema; `dependency_overrides` for auth ([`testing.md`](testing.md) § The store is real). |
 | `RootModel[...]` for a typed payload                                  | Unnecessary indirection; FastAPI handles bare type aliases.     | `Annotated[list[int], Field(min_length=1), Body()]`.                                         |
 | `@app.api_route("/x", methods=["GET", "POST"])`                       | Mixes operations; bad OpenAPI; if/else inside.                  | One function per HTTP operation.                                                             |
 | Global mutable state (`db_session = None` at module top)              | Worker-local, races, leaks across requests.                     | Dependency injection; `app.state` set in lifespan.                                           |

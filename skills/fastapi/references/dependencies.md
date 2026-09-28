@@ -178,44 +178,5 @@ async def read_items(paginator: Annotated[DatabasePaginator, Depends()]):
 
 ## Overriding dependencies in tests
 
-`app.dependency_overrides` swaps a dep at the registration key — no monkey-patching of internals, no global state. The replacement is a plain callable returning the substitute.
-
-```python
-# tests/conftest.py
-import pytest
-from fastapi.testclient import TestClient
-from httpx import ASGITransport, AsyncClient
-
-from app.main import app
-from app.api.deps import get_db
-from app.api.authn_deps import get_current_user
-
-
-@pytest.fixture
-async def client(fake_user) -> AsyncClient:
-    # Real DB session via testcontainers; fake user injected.
-    app.dependency_overrides[get_current_user] = lambda: fake_user
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
-
-    app.dependency_overrides.clear()
-```
-
-```python
-# tests/test_items.py
-async def test_create_item(client: AsyncClient) -> None:
-    r = await client.post("/api/v1/items", json={"name": "foo"})
-    assert r.status_code == 201
-```
-
-**Rules:**
-
-- Override at the **registration key** — pass the original `get_current_user` function, not the dep wrapper.
-- **`async with AsyncClient + ASGITransport`** for tests, not the legacy `async_asgi_testclient` (unmaintained).
-- **Don't override the database session** with a mock — use testcontainers + a real ephemeral schema. Mock/prod divergence eventually fires in prod. See `anti-patterns.md`.
-- **`app.dependency_overrides.clear()`** in fixture teardown so tests don't bleed.
-- **Two testing layers — pick the right one:**
-  - `app.dependency_overrides[get_X]` swaps the **dependency itself** (auth, user, session factory).
-  - **`respx`** keeps the real dep — including the real `httpx.AsyncClient` from `HttpDep` — and intercepts the **HTTP transport** so external requests return mocked `httpx.Response`s instead of hitting the network. Use this when the route calls an external API and you want the real request pipeline (URL building, headers, retry policy) to run. See `writing-python` § Mocking HTTPX with `respx`. **`respx` is test-only — never use it at runtime.**
+`app.dependency_overrides`, the client that runs the lifespan, and when to use `respx` instead of an
+override: [`testing.md`](testing.md) § Overriding dependencies.
