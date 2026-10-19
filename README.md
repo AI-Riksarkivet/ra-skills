@@ -137,7 +137,7 @@ the Gradio installer).
 
 ra-skills holds **only shared, reusable skills** (language + toolchain): `writing-python`,
 `writing-typescript`, `fastapi`, `testing-python`, `python-infrastructure`, `otel`, `dagger`,
-`dockerfile`, `turborepo`, `shadcn-svelte`, `micro-frontends`, `playwright-cli`, `architecture-diagram`, `gsap`, `svelte-flow`, `zensical-setup`, `zensical-authoring`.
+`dockerfile`, `cineca-hpc`, `turborepo`, `shadcn-svelte`, `micro-frontends`, `playwright-cli`, `architecture-diagram`, `gsap`, `svelte-flow`, `zensical-setup`, `zensical-authoring`.
 
 **Project-specific skills live with their project, not here** — e.g. rask's `rask-*`
 architecture/pipeline/orchestrator skills are vendored in the rask repo's `.claude/skills/`, and
@@ -149,6 +149,7 @@ the shared marketplace.
 | Name | Description | Documentation |
 |------|-------------|---------------|
 | `architecture-diagram` | Architecture diagrams for the rask platform as a single self-contained HTML file — interactive click-through flows (animated steps, mode toggles, side panel, drag) OR static export-ready topology snapshots with cloud/cluster/security-group/zone boundaries; both with built-in PNG/PDF/clipboard export. Biased to the RA stack: Ray, Argo Workflows, GitOps, Kubernetes, NATS JetStream, Dapr, Redis, FastAPI, SvelteKit, turborepo, micro-frontends, HF Hub, OpenTelemetry, the HTR pipeline. | [SKILL.md](skills/architecture-diagram/SKILL.md) |
+| `cineca-hpc` | CINECA HPC clusters (Leonardo, Marconi, Galileo100, Pitagora) — 2FA login with Smallstep SSH certificates, Slurm jobs on the Leonardo Booster GPUs, modules and containers, filesystems, budget. Use when the user mentions CINECA or Leonardo, step ssh login, sbatch/srun/squeue on these clusters, saldo, or an HPC login/2FA problem. | [SKILL.md](skills/cineca-hpc/SKILL.md) |
 | `dagger` | Write Dagger modules and functions in Go — CI/CD pipelines and container builds as typed, composable code that runs identically locally and in CI. Use when the user mentions dagger (module, shell, Daggerverse, dagger.json, Dagger Cloud) or code uses dag.* types (dag.Container, dag.Directory); wants to replace shell scripts or YAML CI configs with Go pipeline code; is building or publishing container images in a build-test-push pipeline (Docker registry, PyPI); or needs pipeline supply-chain security — Trivy vulnerability scans, SBOM generation, provenance attestation, cosign signing. | [SKILL.md](skills/dagger/SKILL.md) |
 | `dockerfile` | Production dockerfiles — multi-stage discipline, BuildKit cache mounts, hadolint, the .docker build-context contract. | [SKILL.md](skills/dockerfile/SKILL.md) |
 | `fastapi` | FastAPI best practices, conventions, and production project templates. Use when writing, reviewing, refactoring or testing FastAPI or Pydantic API code, when scaffolding a new FastAPI project, or when building any new Python HTTP/REST service (FastAPI is the house standard). | [SKILL.md](skills/fastapi/SKILL.md) |
@@ -175,7 +176,7 @@ the shared marketplace.
 
 ### 1. RA-owned skills — **vendored here** (this repo)
 
-The 17 skills above. Repos consume them as a marketplace (`/plugin install <name>@ra-skills`),
+The 18 skills above. Repos consume them as a marketplace (`/plugin install <name>@ra-skills`),
 **not** by copying into `.claude/skills/` — that copy-vendoring is exactly what caused the drift
 this repo fixes.
 
