@@ -5,8 +5,10 @@ Annotations are enforced documentation. This project runs `ty check` in CI; unty
 ## Contents
 
 - Annotate every public signature
+- Annotations are evaluated lazily (3.14+)
 - Union syntax
 - Type narrowing with guards
+- Sentinels (3.15+)
 - Generics (PEP 695 syntax)
 - Generic repository pattern
 - Bounded type parameters (Pydantic-aware)
@@ -37,6 +39,37 @@ class UserRepository:
 
 Minimize `Any` — acceptable only for truly dynamic data or untyped third-party code.
 
+## Annotations are evaluated lazily (3.14+)
+
+From 3.14 an annotation is evaluated when something reads it, not when the `def` or `class` runs (PEP 649/749). On a
+project whose floor is 3.14:
+
+- **Write forward references unquoted, and no `from __future__ import annotations` in a new module.** The import is
+  deprecated (removal not before 3.13's end of life in 2029); existing modules keep it until one codemod removes it.
+- **A name Pydantic or FastAPI reads must exist at runtime when they read it.** Pydantic resolves a field's forward
+  reference on first use; FastAPI resolves a route's parameter and return types at decoration. Measured on 3.15.2 with
+  FastAPI 0.165: a route whose body model is defined after the route reads the body as a query parameter (422) and
+  `app.openapi()` raises `PydanticUserError … is not fully defined`. Define or import models above the routes.
+- **`if TYPE_CHECKING:` names stay out of models and routes.** A field or route parameter annotated with one fails, with
+  or without the `__future__` import (measured, pydantic 2.14, FastAPI 0.165).
+- **Read annotations with `annotationlib.get_annotations(obj, format=Format.FORWARDREF)`**, never `obj.__annotations__` or
+  a class's `__dict__`; `typing.get_type_hints` evaluates everything and raises on the first undefined name.
+
+```python
+# before (3.13)
+from __future__ import annotations
+
+class Parent(BaseModel):
+    child: Child | None = None
+
+# after (floor 3.14)
+class Parent(BaseModel):
+    child: Child | None = None    # Child defined below; Pydantic resolves it on first use
+
+class Child(BaseModel):
+    name: str
+```
+
 ## Union syntax
 
 ```python
@@ -62,6 +95,27 @@ def process_items(items: list[Item | None]) -> list[ProcessedItem]:
     return [process(item) for item in valid_items]
 ```
 
+## Sentinels (3.15+)
+
+When `None` is a meaningful value, "not passed" needs its own marker. From 3.15 that is `sentinel` (PEP 661): a readable
+repr, identity kept across `copy` and `pickle`, and usable in a type expression so `ty` narrows on `is`.
+
+```python
+# before
+_UNSET: Final = object()            # repr: <object object at 0xffff...>
+
+# after (floor 3.15)
+UNSET = sentinel("UNSET")
+
+def configure(timeout: float | None | UNSET = UNSET) -> float | None:
+    if timeout is UNSET:
+        return DEFAULT_TIMEOUT
+    return timeout                  # ty: float | None
+```
+
+Not as a Pydantic field default: Pydantic 2.14 refuses `x: int | UNSET = UNSET` with `PydanticSchemaGenerationError`
+(measured). A model says "unset" with `model_fields_set`.
+
 ## Generics
 
 **Why generics?** They let you write a class or function once and reuse it for many element types **without losing type information**. `list[int]` and `list[str]` aren't compatible — `ty` will catch passing one where the other is expected. Without generics, you'd either lose the element type (`list` → "list of anything") or duplicate the class per element type.
@@ -74,11 +128,7 @@ Use PEP 695 type-parameter syntax — it's the form in this project. The `[T, E:
 class Result[T, E: Exception]:
     """Either a success value or an error."""
 
-    def __init__(
-        self,
-        value: T | None = None,
-        error: E | None = None,
-    ) -> None:
+    def __init__(self, *, value: T | None = None, error: E | None = None) -> None:
         if (value is None) == (error is None):
             raise ValueError("Exactly one of value or error must be set")
         self._value = value
@@ -91,7 +141,9 @@ class Result[T, E: Exception]:
     def unwrap(self) -> T:
         if self._error is not None:
             raise self._error
-        return self._value  # type: ignore[return-value]
+        if self._value is None:
+            raise RuntimeError("unreachable: a Result holds a value or an error")
+        return self._value
 
 
 def parse_config(path: str) -> Result[Config, ConfigError]:
@@ -155,13 +207,13 @@ user = validate_and_create(User, {"name": "Alice", "email": "a@b.com"})
 If there's only ever **one** implementation, don't bother with a `Protocol`. The concrete class IS the interface.
 
 ```python
-from typing import Protocol, runtime_checkable
+from typing import Protocol, Self, runtime_checkable
 
 @runtime_checkable
 class Serializable(Protocol):
-    def to_dict(self) -> dict: ...
+    def to_dict(self) -> dict[str, object]: ...
     @classmethod
-    def from_dict(cls, data: dict) -> "Serializable": ...
+    def from_dict(cls, data: dict[str, object]) -> Self: ...
 
 def serialize(obj: Serializable) -> str:
     return json.dumps(obj.to_dict())
@@ -220,10 +272,10 @@ type AsyncHandler[T] = Callable[[Request], Awaitable[T]]
 ## Callable types
 
 ```python
-from collections.abc import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
-ProgressCallback = Callable[[int, int], None]  # (current, total)
-AsyncHandler = Callable[[Request], Awaitable[Response]]
+type ProgressCallback = Callable[[int, int], None]  # (current, total)
+type AsyncHandler = Callable[[Request], Awaitable[Response]]
 
 # With keyword args via Protocol
 class OnProgress(Protocol):
@@ -299,8 +351,14 @@ users = fetch_users(limit=5)
 
 ```toml
 # pyproject.toml
+[tool.ty.environment]
+python-version = "3.15"     # equal to requires-python's floor; ruff reads requires-python itself
+
 [tool.ty.terminal]
 error-on-warning = true
 ```
+
+Run it as `uv run ty check`, at the locked version. ty 0.0.86 already type-checks 3.15 code (lazy imports, `sentinel`,
+`frozendict`, comprehension unpacking; measured), so a version move needs no ty upgrade of its own.
 
 For incremental adoption on legacy code, use per-module overrides — see the `astral:ty` skill.

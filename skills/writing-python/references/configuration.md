@@ -158,11 +158,11 @@ DEBUG=true
 ## Environment-specific behavior
 
 ```python
-from enum import Enum
+from enum import StrEnum
 from pydantic_settings import BaseSettings
 from pydantic import Field, computed_field
 
-class Environment(str, Enum):
+class Environment(StrEnum):
     LOCAL = "local"
     STAGING = "staging"
     PRODUCTION = "production"

@@ -223,14 +223,20 @@ If you only need plain video streaming without HTTP-range support, plain `FileRe
 ```python
 from typing import Annotated
 from fastapi import APIRouter, File, UploadFile, HTTPException
+from pydantic import BaseModel
 
 router = APIRouter()
 MAX_MB = 50
 
 
-@router.post("/upload")
-async def upload(file: Annotated[UploadFile, File(...)]) -> dict[str, object]:
-    # Validate before reading — `UploadFile.size` is set when the client sends Content-Length.
+class UploadReceipt(BaseModel):
+    saved: str
+    size: int
+
+
+@router.post("/upload", max_body_size=MAX_MB * 1024 * 1024)   # the real cap: counts every byte read
+async def upload(file: Annotated[UploadFile, File()]) -> UploadReceipt:
+    # Early refusal only — `UploadFile.size` is what the client claimed.
     if file.size is not None and file.size > MAX_MB * 1024 * 1024:
         raise HTTPException(413, f"file too large (>{MAX_MB} MB)")
 
@@ -242,12 +248,14 @@ async def upload(file: Annotated[UploadFile, File(...)]) -> dict[str, object]:
         while chunk := await file.read(1 << 20):   # 1 MiB chunks; backpressure-friendly
             await out.write(chunk)
 
-    return {"saved": target.name, "size": target.stat().st_size}
+    return UploadReceipt(saved=target.name, size=target.stat().st_size)
 ```
 
 - **Never** call `await file.read()` without a size — that loads the whole upload into memory.
-- For multi-file uploads, use `list[UploadFile]`. For form fields alongside, use `Form(...)`.
-- For uploads that flow straight to S3 / GCS, use the storage client's streaming upload API and pass `file.file` (a SpooledTemporaryFile-like object) — no on-disk staging needed.
+- Cap the request: `max_body_size=` on the upload route (fastapi ≥ 0.164) counts every file and the multipart framing; `form_limits={"max_files": …, "max_part_size": …}` (≥ 0.165; `max_part_size` is per text field) bounds the parser, 400 on excess. `file.size` is only what the client claimed.
+- Forms need `python-multipart`. Since fastapi 0.150 an unselected browser file input (empty filename, empty body) is MISSING, not a zero-byte file.
+- For multi-file uploads, use `list[UploadFile]`. For form fields alongside, use `Form()` or a form model ([`parameter-models.md`](parameter-models.md)).
+- For uploads that flow straight to S3 / GCS, use the storage client's streaming upload API and pass `file.file` — no on-disk staging needed.
 
 ## Temp files & guaranteed cleanup
 
@@ -328,7 +336,7 @@ return FileResponse(target, headers={"Content-Disposition": cd})
 | Mistake                                                          | Why                                                                                                  |
 | ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `return open(path, "rb").read()` from a route                    | Loads the whole file into memory. Use `FileResponse`.                                                |
-| `await file.read()` without a size cap on uploads                | Bounded only by client patience. Read in 1 MiB chunks; check `file.size` first.                      |
+| `await file.read()` without a size cap on uploads                | Bounded only by client patience. Read in 1 MiB chunks; cap the route with `max_body_size` (`file.size` is only the client's claim). |
 | Using `aiofiles` to serve a static file when `FileResponse` would | Reinventing what Starlette already does (sendfile-aware).                                            |
 | `media_type="application/octet-stream"` for previewable content  | Browser will always download. Set the real MIME type if `inline` is wanted.                          |
 | User-controlled path joined without `resolve()` + `is_relative_to` check | Directory traversal — `../../etc/passwd` reads off-tree.                                       |

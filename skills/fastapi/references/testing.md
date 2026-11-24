@@ -211,3 +211,5 @@ def test_ping_over_a_socket(live_url: str) -> None:
 ```
 
 uvicorn runs the lifespan itself (`lifespan="auto"` by default).
+
+`TestClient` streams response bodies since starlette 1.9.0: `client.stream()` returns before the app finishes, and **closing an unfinished streamed response cancels the application**. A test that reads part of a stream and closes it now exercises the cancellation path; read the whole body when the claim is about the full answer.

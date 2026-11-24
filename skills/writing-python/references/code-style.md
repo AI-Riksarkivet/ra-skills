@@ -15,9 +15,11 @@ This project uses `ruff` for lint+format and `ty` for type checking — both fas
 
 ```toml
 # pyproject.toml
+[project]
+requires-python = ">=3.15"   # ruff's target-version comes from here; do not set it twice
+
 [tool.ruff]
 line-length = 120
-target-version = "py314"
 
 [tool.ruff.lint]
 select = [
@@ -29,12 +31,17 @@ select = [
     "C4",   # flake8-comprehensions
     "UP",   # pyupgrade
     "SIM",  # flake8-simplify
+    "RUF",  # RUF017 rewrites list-flattening to comprehension unpacking on 3.15
+    "A",    # builtin shadowing: `sentinel` and `frozendict` are builtins from 3.15
 ]
 ignore = ["E501"]  # line length handled by formatter
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+
+[tool.ty.environment]
+python-version = "3.15"
 
 [tool.ty.terminal]
 error-on-warning = true
@@ -43,10 +50,14 @@ error-on-warning = true
 Run:
 
 ```bash
-uvx ruff check --fix .
-uvx ruff format .
-uvx ty check
+uv run ruff check --fix .
+uv run ruff format .
+uv run ty check
 ```
+
+Raising `requires-python` changes what the formatter writes: at a py314+ target `ruff format` rewrites
+`except (A, B):` to `except A, B:` (measured, ruff 0.16.0 and 0.17.6; 63 lines in one 77k-line codebase). Land that
+rewrite in the version-bump commit, not mixed into a feature.
 
 ## Naming conventions
 
@@ -177,7 +188,27 @@ if TYPE_CHECKING:
 
 Avoid relative imports (`from ..utils import x`) — absolute paths are easier to grep and survive moves.
 
-`if TYPE_CHECKING:` is the standard way to import symbols you only need in annotations — the block is skipped at runtime, so it costs nothing and lets two modules reference each other in types without circular-import errors. Use string annotations (`"HeavyClass"`) or `from __future__ import annotations` to keep the references valid at runtime.
+`if TYPE_CHECKING:` imports a name only the type checker sees: no runtime cost, and it breaks import cycles. Since 3.14
+annotations are evaluated lazily, so such a name needs no quotes and no `from __future__ import annotations`. It still
+must not appear in a Pydantic field or a FastAPI route signature, which read annotations at runtime (`type-safety.md` §
+Annotations are evaluated lazily).
+
+On a 3.15 floor, `lazy from x import Y` is the runtime-visible alternative (ruff's `TC003` suggests it at a py315 target,
+measured on 0.17.6): the name exists at runtime and loads on first use. Use it for start-up time in a CLI or a rarely
+taken branch; in a long-running service it only moves the import cost. Rules:
+
+- `lazy` is allowed only at module scope, never inside a function, a class body or a `try` (a `SyntaxError`).
+- A lazy import used as a base class, a decorator, or in an annotation Pydantic/FastAPI read is resolved at once (ruff
+  `TID255` flags the first); measured on 3.15.2 for a Pydantic field.
+- Never the global switch (`-X lazy_imports=all`); see `SKILL.md` § Top gotchas.
+
+```python
+# floor 3.15: the import costs nothing until `render_report` runs
+lazy import jinja2
+
+def render_report(rows: list[Row]) -> str:
+    return jinja2.Template(TEMPLATE).render(rows=rows)
+```
 
 ## Google-style docstrings
 

@@ -127,7 +127,9 @@ async def rate_limit_handler(request: Request, exc: RateLimitError) -> JSONRespo
 
 - **One handler per exception class**, registered in `main.py`. Don't scatter try/except in routes.
 - **Routes raise domain exceptions**, never `HTTPException` (auth deps excepted — see `authn.md`).
-- **Never include exception internals** in the response body — those leak via logs only.
-- **`media_type="application/problem+json"`** on every Problem-shaped response.
+- **Never include exception internals** in the response body — those leak via logs only. A 5xx answers a generic detail.
+- **`media_type="application/problem+json"`** on every Problem-shaped response, the framework's own 404/405 included: register a handler on `starlette.exceptions.HTTPException` (not FastAPI's subclass) to reshape them.
 - **Logging happens inside the handler**, not in the route — `log.exception(...)` inside the active span attaches `trace_id`/`span_id` automatically when OTel is active.
-- **No middleware-based error handlers.** Use `@app.exception_handler(...)` — middleware is the wrong layer (see `anti-patterns.md`).
+- **No middleware-based error handlers** for domain errors. Use `@app.exception_handler(...)` — middleware is the wrong layer (see `anti-patterns.md`). The exception: a failure that is not an `Exception` (a pyo3 panic is a `BaseException`) passes every handler and needs a pure-ASGI catcher.
+- **A handler for `Exception` or `500` re-raises.** Starlette moves it onto `ServerErrorMiddleware`, whose code says "We always continue to raise the exception. This allows servers to log the error" (starlette 1.3.1 `middleware/errors.py`). uvicorn then logs `Exception in ASGI application` at ERROR with the traceback (uvicorn 0.51.0). So: an EXPECTED failure (a store outage you answer 503) gets a handler on its own class, or a pure-ASGI layer inside the stack that answers it without re-raising; the `Exception` handler is the last net for real bugs only, and accepts the second log line.
+- **Log the path routing matched** (`scope["path"]`), not `request.url.path`: since starlette 1.9.0 `request.url` percent-encodes `?`, `#`, `\`, and before that a `?` in a decoded segment cut it short.

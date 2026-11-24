@@ -39,9 +39,9 @@ def process_order(
 Parse strings/external data into typed domain objects as early as possible.
 
 ```python
-from enum import Enum
+from enum import StrEnum
 
-class OutputFormat(str, Enum):
+class OutputFormat(StrEnum):
     JSON = "json"
     CSV = "csv"
     PARQUET = "parquet"
@@ -272,4 +272,7 @@ def process_large_batch(
 - **`raise X from None` suppresses the cause chain; `raise X` preserves `__context__`** — different stack traces. Use `from None` when the lower exception is noise.
 - **Bare `raise` inside `except` re-raises the original; `raise e` rebuilds the traceback** — only bare `raise` preserves the original location.
 - **Exception groups need `except*`, not `except`** — `except ExceptionGroup` catches but doesn't unwrap; `except*` does selective sub-exception handling.
-- **`finally` runs even after `return`** and overrides the return value if it has its own `return` — accidentally returning from `finally` swallows exceptions.
+- **`return`, `break` or `continue` in `finally` overrides the exception or return in flight** — it silently swallows
+  the error. Since 3.14 the compiler warns (`SyntaxWarning`, PEP 765); treat the warning as an error.
+- **`except A, B:` without parentheses is valid from 3.14 (PEP 758), only without `as`.** It catches both, exactly like
+  `except (A, B):`; it is not Python 2's `except A, name:`. Let `ruff format` pick the form.

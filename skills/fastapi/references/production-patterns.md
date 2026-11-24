@@ -8,7 +8,7 @@ Lifespan, middleware, and the operational glue around a production FastAPI servi
 
 - Lifespan — build once, dispose once
 - Graceful shutdown — the complete pattern + patterns to avoid
-- Bridging sync ↔ async with Asyncer
+- Bridging sync ↔ async — `asyncify` or `run_in_threadpool`
 - Dependency injection from `app.state` — `SessionDep`, `HttpDep` wrappers
 - Middleware — three styles, execution order, Request ID, Timing, Logging, built-in helpers, ContextVar
 - Health checks → [`health-checks.md`](health-checks.md)
@@ -168,12 +168,17 @@ exit(0)
 
 If you reach for any of these, uvicorn isn't doing what you think — measure first. Likely real causes: short `terminationGracePeriodSeconds`, missing `preStop` sleep (so traffic still arrives during SIGTERM), or a route slower than the grace period (move that work to a background worker — see `python-infrastructure`).
 
-## Bridging sync ↔ async with Asyncer
+## Bridging sync ↔ async
 
-When you must call blocking code from an async handler, **don't** import `anyio.to_thread.run_sync` directly — use `asyncer.asyncify()`. Same primitive, friendlier API. The inverse (`syncify()`) lets a sync context call async code without spinning up a fresh event loop.
+When an `async def` must call blocking code, hand the call to the threadpool. Two equivalent tools, both on anyio's default thread limiter (40 threads; saturating it slows every sync route and sync dependency):
+
+- `asyncer.asyncify(fn)(...)` — typed signature, plus `syncify()` for the inverse. Upstream prefers it "over AnyIO or asyncio" and "over `run_in_threadpool()`" [upstream: `references/other-tools.md`].
+- `fastapi.concurrency.run_in_threadpool(fn, *args, **kwargs)` — no extra dependency.
+
+House rule, differing from upstream: either is fine. Pick one per project and use it everywhere. Not `concurrent.futures.ThreadPoolExecutor` (bypasses the limiter), not raw `asyncio.to_thread` (a different pool).
 
 ```python
-from asyncer import asyncify, syncify
+from asyncer import asyncify
 from fastapi import APIRouter
 
 router = APIRouter()
@@ -189,7 +194,7 @@ async def read_items() -> dict[str, str]:
     return {"message": await asyncify(blocking_call)(name="world")}
 ```
 
-Prefer `asyncer` over raw `anyio` / `asyncio.to_thread` for readability; over `concurrent.futures.ThreadPoolExecutor` because it integrates with Starlette's existing threadpool budget (default 40 workers — saturating it slows every sync route).
+Export the limiter's `borrowed_tokens`, `total_tokens` and `statistics().tasks_waiting` as gauges: waiting > 0 means every thread is held and requests queue with no error anywhere.
 
 ## Dependency injection from `app.state`
 
@@ -226,15 +231,17 @@ Routes consume `SessionDep` / `HttpDep` — no knowledge of `app.state`.
 
 ## Middleware
 
-### Three styles — pick the smallest that fits
+### Three styles — pick by what the layer touches
 
-| Style                                                       | When to use                                                                                                  | Cost                                                                |
-| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
-| **`@app.middleware("http")` decorator**                     | One-off, no config, no state. Smallest amount of code.                                                       | Hard to test in isolation; can't be packaged for reuse.             |
-| **`BaseHTTPMiddleware` subclass**                           | Reusable, configurable (constructor args), shareable across services. **Default choice** for this project.   | Slight overhead vs pure ASGI.                                       |
-| **Pure ASGI (`async def __call__(self, scope, receive, send)`)** | Maximum performance, need to inspect/modify ASGI messages directly, or stream bodies without buffering. | Verbose, easy to break; only reach for it when you have measured.   |
+| Style | When to use | Cost |
+| --- | --- | --- |
+| **`@app.middleware("http")` decorator** | One-off, header-only tweak on a small app. | It IS a `BaseHTTPMiddleware` (below). |
+| **`BaseHTTPMiddleware` subclass** | Reusable header/logging tweaks on routes that do not stream. | Every response passes an anyio memory stream and a task group; a `ContextVar` set in the route does not propagate out through it; stacked layers needed a starlette 1.8.0 fix to close `Request.stream()` cleanly. |
+| **Pure ASGI (`async def __call__(self, scope, receive, send)`)** | Anything that reads or caps the body, sheds load, answers before the route, or sits on streaming routes. | More code; check `scope["type"]` first — `if scope["type"] != "http": await self.app(scope, receive, send); return` — or it crashes on WebSocket and lifespan messages. |
 
-> If you're catching yourself implementing both — class-based AND a decorator — you're doing too much. Pick one.
+Default to pure ASGI for a layer every request passes in a service that streams large bodies. A pure-ASGI layer refuses a body as its bytes arrive and never buffers it.
+
+**A layer added with `add_middleware` sits INSIDE Starlette's `ServerErrorMiddleware`**, so it never sees the 500 that layer answers for an unhandled exception. To set a header on every answer (e.g. `Cache-Control: no-store`), wrap the app's own `__call__`, not the middleware stack — and leave the stack's outermost layer `ServerErrorMiddleware`, which `opentelemetry-instrumentation-fastapi` checks before it instruments (measured on 0.66b2: otherwise it logs "Skipping FastAPI instrumentation due to unexpected middleware stack").
 
 ### Execution order (onion)
 
@@ -315,6 +322,7 @@ log = logging.getLogger("app.requests")
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
+    # scope["path"], not request.url.path — see exception-handlers.md § Rules
     async def dispatch(self, request, call_next):
         request_id = getattr(request.state, "request_id", "-")
         try:
@@ -324,7 +332,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 extra={
                     "request_id": request_id,
                     "method": request.method,
-                    "path": request.url.path,
+                    "path": request.scope["path"],
                     "status": response.status_code,
                 },
             )
@@ -332,7 +340,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         except Exception:
             log.exception(
                 "request_failed",
-                extra={"request_id": request_id, "method": request.method, "path": request.url.path},
+                extra={"request_id": request_id, "method": request.method, "path": request.scope["path"]},
             )
             raise
 ```

@@ -5,6 +5,8 @@
 - Dependencies with `yield` and `scope`
 - Sub-dependency chains
 - Per-request caching (and `use_cache=False`)
+- Sync dependencies cost a thread
+- Limit dependency concurrency (`max_concurrency`)
 - Class dependencies
 - Overriding dependencies in tests
 
@@ -104,11 +106,39 @@ async def two_ids(
 
 Without `use_cache=False`, `a == b`.
 
+## Sync dependencies cost a thread
+
+A `def` dependency runs in the threadpool, like a `def` route — on the same anyio limiter (40 threads by default) the blocking work uses. A dependency that only reads `app.state`, a header or an `lru_cache`d settings object then waits for a thread when the pool is saturated, on every request, for nothing.
+
+- Pure and non-blocking (reads state, headers, a cached value) → `async def`.
+- Does IO or might (token verification that may fetch keys, a file, a sync SDK) → `def`, so it runs off the loop. "The same rules apply to dependencies" [upstream: `SKILL.md`].
+
+## Limit dependency concurrency
+
+[upstream: `references/dependencies.md` § Limit dependency concurrency; fastapi ≥ 0.163.0]
+
+`Depends(dep, max_concurrency=N)` caps how many calls of that dependency run at once. Extra calls **wait**, without occupying a worker thread.
+
+```python
+DBDep = Annotated[DBSession, Depends(get_db, max_concurrency=5)]
+```
+
+- Put it on the dependency that holds the resource; its sub-dependencies run before the limit applies.
+- Size N from the resource's capacity, leaving room for other users. FastAPI does not read the pool size; `None` means no limit.
+- Declare ONE `Annotated` alias and reuse it: each `Depends()` object is its own limit, even for the same function.
+- With `yield`, the slot is held until cleanup finishes (as `scope` sets).
+- Limits are per worker process: N per pod × replicas reach the shared resource.
+- A request that holds one slot and waits for another can deadlock. Check nested resource dependencies first.
+
+It queues. When the answer under load should be a fast 429 with `Retry-After` instead of a wait, that is a shed in middleware, not this.
+
 ## Class Dependencies
 
 Avoid creating class dependencies when possible.
 
 If a class is needed, instead create a regular function dependency that returns a class instance.
+
+House rule: the class is a Pydantic `BaseModel` (upstream's example uses `@dataclass`; the house bans dataclasses for structured values — `writing-python`). Validation constraints then live on the model.
 
 Do this:
 

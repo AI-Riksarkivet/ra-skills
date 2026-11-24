@@ -1,6 +1,6 @@
 # Everyday Patterns
 
-Reference for project layout, async, pathlib, functools caching/dispatch, and logging.
+Reference for project layout, async, pathlib, functools caching/dispatch, constant lookup tables, and logging.
 
 Topics with their own reference are not repeated here: Pydantic model basics → `SKILL.md` § Quick patterns; type hints → `type-safety.md`; custom exceptions and validation → `error-handling.md`; context managers → `resource-management.md`.
 
@@ -10,6 +10,7 @@ Topics with their own reference are not repeated here: Pydantic model basics →
 - Async patterns
 - Pathlib
 - Functools toolkit
+- Constant lookup tables
 - Logging
 
 ## Project structure
@@ -55,6 +56,30 @@ async def fetch_both(a_url: str, b_url: str) -> tuple[bytes, bytes]:
     return a_task.result(), b_task.result()
 ```
 
+Stop a group early with `tg.cancel()` (3.15+) rather than raising a private exception to unwind it:
+
+```python
+async def first_hit(urls: list[str]) -> bytes | None:
+    found: bytes | None = None
+    async with asyncio.TaskGroup() as tg:
+        async def probe(url: str) -> None:
+            nonlocal found
+            if (body := await fetch(url)) and found is None:
+                found = body
+                tg.cancel()
+        for url in urls:
+            tg.create_task(probe(url))
+    return found
+```
+
+Entry points use `asyncio.run(main())`, or `asyncio.Runner` when sync and async code alternate. `asyncio.get_event_loop()`
+raises `RuntimeError` with no running loop since 3.14 (measured on 3.15.2), and the event-loop policy API
+(`set_event_loop_policy`, `*EventLoopPolicy`) and `asyncio.iscoroutinefunction` are removed in 3.16: choose a loop with
+`asyncio.run(main(), loop_factory=...)`, test a coroutine function with `inspect.iscoroutinefunction`.
+
+To see what a hung async process is doing: `python -m asyncio pstree <pid>` (3.14+), or
+`python -m profiling.sampling attach --async-aware <pid>` (3.15+, needs ptrace rights).
+
 ## Pathlib
 
 ```python
@@ -64,11 +89,12 @@ import json
 def process_files(directory: Path) -> list[Path]:
     return list(directory.glob("**/*.json"))
 
-def read_config(path: Path) -> dict:
-    return json.loads(path.read_text())
+def read_config(path: Path) -> dict[str, object]:
+    return json.loads(path.read_text(encoding="utf-8"))
 ```
 
-Prefer `Path` over `os.path` everywhere.
+Prefer `Path` over `os.path` everywhere. Pass `encoding="utf-8"` while the floor is below 3.15; from 3.15 UTF-8 is the
+default on every platform (PEP 686) and the argument may be dropped.
 
 ## Functools toolkit
 
@@ -159,14 +185,17 @@ For methods, `partialmethod`. Don't reach for `partial` when a closure or a `lam
 
 ### `reduce` — last resort
 
-Almost always `sum()`, `min()`, `max()`, `itertools.accumulate`, or a plain loop reads better. Use `reduce` only for genuinely associative operations with no stdlib shortcut (e.g. merging a list of `set`s, composing functions).
+Almost always `sum()`, `min()`, `max()`, `itertools.accumulate`, a comprehension, or a plain loop reads better. Flattening
+is a comprehension: on a 3.15 floor with unpacking (PEP 798), before it with two `for` clauses. Never `sum(lists, [])`,
+which is quadratic (ruff `RUF017` rewrites it; measured on 0.17.6 it now writes the unpacking form).
 
 ```python
-from functools import reduce
-import operator
-
-merged: set[str] = reduce(operator.or_, sets, set())
+merged = [*chunk for chunk in chunks]          # 3.15+
+merged = [x for chunk in chunks for x in chunk]  # before 3.15
+union = {*s for s in sets}                     # 3.15+, instead of reduce(operator.or_, sets, set())
 ```
+
+Use `reduce` only for an associative operation with no shortcut, such as composing functions.
 
 ### When NOT to cache
 
@@ -174,6 +203,23 @@ merged: set[str] = reduce(operator.or_, sets, set())
 - **Side-effecting functions** — `@cache` will silently skip the side effect on a hit.
 - **Mutable arguments** — `@cache` requires hashable args; passing a `list` raises, passing a custom unhashable class raises, but a class with a buggy `__hash__` silently caches wrong.
 - **Hot loops where the cache lookup costs more than the work** — measure before optimizing.
+
+## Constant lookup tables
+
+A module-level table that nothing should change is a `frozendict` on a 3.15 floor (PEP 814). `Final` only stops
+rebinding the name; `TABLE["x"] = …` still works on a `Final[dict]`.
+
+```python
+# before
+STATUS_FOR: Final[dict[str, int]] = {"not_found": 404, "conflict": 409}
+
+# after (floor 3.15)
+STATUS_FOR: Final = frozendict(not_found=404, conflict=409)
+```
+
+`frozendict` is not a `dict` subclass: `isinstance(t, dict)` is False. Don't hand one to a library that checks for
+`dict` (an OpenAPI fragment, a FastAPI `responses=`); check `collections.abc.Mapping` in your own code. json, pickle and
+copy handle it, and Pydantic 2.14 accepts and keeps it in a `frozendict[str, int]` field (measured).
 
 ## Logging
 

@@ -54,7 +54,7 @@ def get_pagination(
 PaginationDep = Annotated[PaginationParams, Depends(get_pagination)]
 ```
 
-`alias="limit"` lets callers use either `?page_size=20` or `?limit=20` — pick the one your front-end already sends, don't expose both publicly.
+`alias="limit"` makes the wire name `?limit=` — the Python name `page_size` is NOT accepted on the wire. Pick the one name your front end sends; to accept two spellings use `validation_alias=AliasChoices("limit", "page_size")` (fixed for query parameters in fastapi 0.156.3). A query-parameter model ([`parameter-models.md`](parameter-models.md)) replaces this factory dependency where the group needs no logic; several models per route need fastapi ≥ 0.157.
 
 ## Paginated response envelope (generic, PEP 695)
 
@@ -122,8 +122,10 @@ import base64
 import json
 from datetime import datetime
 from typing import Annotated
-from fastapi import Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from fastapi import Depends, Query
+from pydantic import BaseModel, ValidationError
+
+from app.core.exceptions import InvalidCursorError   # DomainError, status_code = 400 (exception-handlers.md)
 
 
 class CursorParams(BaseModel):
@@ -132,11 +134,9 @@ class CursorParams(BaseModel):
     after_id: int | None = None
 
 
-def _decode(cursor: str) -> dict[str, object]:
-    try:
-        return json.loads(base64.urlsafe_b64decode(cursor))
-    except Exception as e:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid cursor") from e
+class _Cursor(BaseModel):
+    ts: datetime
+    id: int
 
 
 def encode_cursor(*, created_at: datetime, id: int) -> str:
@@ -151,12 +151,11 @@ def get_cursor(
 ) -> CursorParams:
     if cursor is None:
         return CursorParams(limit=limit)
-    decoded = _decode(cursor)
-    return CursorParams(
-        limit=limit,
-        after_created_at=datetime.fromisoformat(str(decoded["ts"])),
-        after_id=int(decoded["id"]),       # type: ignore[arg-type]
-    )
+    try:
+        decoded = _Cursor.model_validate_json(base64.urlsafe_b64decode(cursor))
+    except (ValueError, ValidationError) as e:
+        raise InvalidCursorError() from e        # domain error → 400 via its handler
+    return CursorParams(limit=limit, after_created_at=decoded.ts, after_id=decoded.id)
 
 
 CursorDep = Annotated[CursorParams, Depends(get_cursor)]

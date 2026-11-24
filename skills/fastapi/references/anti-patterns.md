@@ -15,13 +15,13 @@ For richer **code-level wrong-vs-right** examples on a given topic, the per-topi
 | Observability / OTel | [`observability.md`](observability.md) § What NOT to do          |
 | Authz / OpenFGA      | [`authz.md`](authz.md) (operational notes)                       |
 | Dependencies         | [`dependencies.md`](dependencies.md) (rules in each subsection)  |
-| Lifespan / middleware| [`production-patterns.md`](production-patterns.md) § Patterns to avoid |
+| Lifespan / middleware| [`production-patterns.md`](production-patterns.md) § Patterns to avoid, § Three styles (pure ASGI checks `scope["type"]`) |
 
 ## The table
 
 | Anti-pattern                                                          | Why it's wrong                                                  | Fix                                                                                          |
 | --------------------------------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `requests.get(...)` inside `async def`                                | Blocks the event loop — `requests` is sync.                     | `httpx.AsyncClient` or `await run_in_threadpool(requests.get, ...)`.                         |
+| `requests.get(...)` inside `async def`                                | Blocks the event loop — `requests` is sync.                     | `httpx.AsyncClient`, or hand it to the thread: `await asyncify(requests.get)(...)` / `await run_in_threadpool(requests.get, ...)` (one per project). |
 | `time.sleep`, `open()`, sync DB driver inside `async def`             | Same — blocks the loop, kills throughput.                       | Async equivalent: `asyncio.sleep`, `aiofiles`, async DB driver.                              |
 | `from jose import jwt`                                                | `python-jose` is largely unmaintained.                          | `import jwt` (PyJWT).                                                                        |
 | `from async_asgi_testclient import TestClient`                        | Unmaintained.                                                   | `with TestClient(app)`; for an async test, `AsyncClient` + `ASGITransport` under `LifespanManager` ([`testing.md`](testing.md)). |
@@ -49,7 +49,7 @@ For richer **code-level wrong-vs-right** examples on a given topic, the per-topi
 | `print(...)` for diagnostics                                          | No structure, no log level, no correlation id.                  | `logging.getLogger(__name__)`; OTel forwards records.                                        |
 | Authentication middleware that blocks routes globally                 | Couples auth to every endpoint; breaks public routes; can't reuse the resolved user. | Use a FastAPI dependency (`CurrentUserDep`); apply at the router level with `dependencies=[...]`. See `authn.md`. |
 | Custom middleware that catches `Exception` and returns JSON           | Duplicates `@app.exception_handler`; scattered error shape.     | Use `@app.exception_handler(DomainError)` (see `exception-handlers.md`).                     |
-| `RequestValidationMiddleware` that re-checks Content-Type / body size | FastAPI + Pydantic already validate the body; Starlette has limits. | Push validation into the Pydantic model; configure `request.scope["app"]` size limits at the ASGI server. |
+| `RequestValidationMiddleware` that re-checks Content-Type / body size | FastAPI + Pydantic already validate the body and check JSON Content-Type (`strict_content_type`). | Push validation into the Pydantic model; cap bytes with `max_body_size` on the app and the routes that need more (fastapi ≥ 0.164). |
 | `httpx.AsyncClient()` inside a middleware's `dispatch`                | New connection pool per request — defeats the point.            | One `app.state.http` client built in lifespan; inject via dep.                                |
 | Setting a `ContextVar` in middleware without resetting in `finally`   | Value leaks into the next request that reuses the worker.       | `token = ctx.set(...)` → `ctx.reset(token)` in `finally`.                                    |
 | Doing slow / blocking work in middleware                              | Middleware runs on every request; one slow call multiplies.     | Fire-and-forget (`asyncio.create_task`) or move to a background worker (`python-infrastructure`). |
@@ -60,7 +60,14 @@ For richer **code-level wrong-vs-right** examples on a given topic, the per-topi
 | Running FastAPI with `--workers N` inside a Kubernetes pod            | See `kubernetes.md` § Process model.                            | One worker per pod, `replicas: N` in the Deployment.                                         |
 | No rate limit on `/token` / `/login` / `/forgot-password`             | Credential stuffing brute-forces unmetered.                     | `slowapi` or `fastapi-limiter` on auth endpoints (e.g. 5 / min / IP). Apply at the route or router, not as global middleware. |
 | Reading `await request.body()` (or `request.json()`) in middleware    | The request body is a one-shot stream; consuming it in middleware leaves the route handler with an empty body and an `Empty body` error. | If you must inspect the body, read it once and store on `request.state`, OR use an ASGI `receive` wrapper to re-yield the bytes. Usually: just don't read the body in middleware. |
-| Pure ASGI middleware that doesn't check `scope["type"]`               | Crashes on WebSocket / lifespan messages it wasn't designed for. | Always `if scope["type"] != "http": await self.app(scope, receive, send); return` at the top of `__call__`. |
+| One body cap sized for uploads, applied to every route                | JSON routes then buffer and `json.loads` that size on the event loop (117 ms / 65 MiB measured), and their objects multiply it in memory. | Small app `max_body_size`; raise it on the upload routes only. |
+| `@app.exception_handler(Exception)` answering an expected failure (503 outage) | Runs in `ServerErrorMiddleware`, which re-raises; uvicorn logs a second ERROR traceback. | Handler on the failure's own class, or a pure-ASGI layer that answers without re-raising. |
+| Trivial sync dependency (`def get_settings()`, `def get_x(request) -> request.app.state.x`) | Each takes a threadpool hop per request and queues behind blocking work when the pool is full. | `async def` for pure, non-IO dependencies. |
+| Uncached file read / JSON parse in a helper called per item from `async def` | Blocks the loop N times per request (177 ms for 1,000 × 37 KB measured); ruff ASYNC does not see a helper. | `@functools.cache` what never changes. |
+| `Query(custom="x")` / unknown keyword on a param function             | `TypeError` since fastapi 0.155.                                | `Query(json_schema_extra={"custom": "x"})`.                                                  |
+| `model_config = ConfigDict(populate_by_name=True)`                    | "not recommended in v2.11+ and will be deprecated in v3" (pydantic 2.14.4 `config.py`). | `ConfigDict(validate_by_name=True, validate_by_alias=True)` — strictly equivalent. |
+| `FastAPI(root_path=...)` / `openapi_prefix=`                          | Deprecated in 0.146 / removed in 0.145.                         | `--root-path` on the server.                                                                 |
+| `FASTAPI_OTEL_AUTO_CONFIGURE=true` beside an exporting SDK            | Duplicate telemetry.                                            | See `observability.md`.                                                                      |
 
 ## When in doubt
 

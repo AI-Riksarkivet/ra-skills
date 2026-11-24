@@ -13,7 +13,7 @@ API-level streaming responses — JSON Lines, Server-Sent Events, raw byte strea
 
 ## Stream JSON Lines
 
-To stream JSON Lines, declare the return type and use `yield` to return the data.
+To stream JSON Lines, declare the return type and use `yield` to return the data [upstream: `references/streaming.md`]. FastAPI serializes each item with Pydantic; non-finite floats are handled since fastapi 0.143.3.
 
 ```python
 @app.get("/items/stream")
@@ -213,9 +213,7 @@ async def ingest(request: Request) -> IngestResult:
 
 Two things that bite:
 
-- **`await request.body()` buffers the whole upload.** That is the request-side twin of the response
-  defect above. Cap it — a `Content-Length` check, a reverse-proxy limit, or middleware — because an
-  unbounded columnar upload is sized by the client.
+- **`await request.body()` buffers the whole upload** — the request-side twin of the response defect above. Cap it on the ROUTE: `max_body_size=` on the path operation (fastapi ≥ 0.164; counts bytes as they arrive, chunked or not; a route that reads the body itself starts before the total is known, and the read stops at the limit with 413 — so parse only after the read completes), with a small app default so the JSON routes do not inherit the upload ceiling ([`core-conventions.md`](core-conventions.md) § Request body limits). On older FastAPI, a pure-ASGI byte-counting middleware matched by route.
 - **A framing mismatch does not say so.** Sending FILE framing to `open_stream` (or the reverse)
   raises `Expected to read 1330795073 metadata bytes` — that number is the `ARROW1` magic read as a
   length. Agree on framing as a contract and say which one in the media type
@@ -227,6 +225,8 @@ a JSON round-trip cannot even preserve an Arrow timestamp's unit. If the client 
 need Arrow.
 
 ## When to return `StreamingResponse` directly
+
+House rule, differing from upstream: upstream says to prefer `response_class=` + `yield` "over returning a `StreamingResponse` directly" without exception. This skill keeps the exception below because it was measured (a failing producer answers 200 with an empty body).
 
 The `response_class=` + `yield` form above is right when the producer cannot fail. It is **wrong when
 the producer validates**, and the failure is silent.

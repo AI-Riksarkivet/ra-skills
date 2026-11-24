@@ -9,6 +9,7 @@ Common Python mistakes to catch before merge. Pair with `references/design-patte
 - Error-handling anti-patterns
 - Resource, type-safety, and testing anti-patterns (pointers to topic refs)
 - Pydantic / data-model anti-patterns
+- Version-move anti-patterns
 - Function-shape anti-patterns
 - Logic-shape anti-patterns
 - Quick review checklist
@@ -229,6 +230,30 @@ class Coords(BaseModel):
     lon: float
 ```
 
+## Version-move anti-patterns
+
+### Pinning a test's input to an interpreter limit
+
+```python
+# BAD: passes on 3.13, means nothing on 3.15
+NESTED = "[" * 10_500 + "]" * 10_500   # "past json's recursion limit"
+
+# GOOD: assert the property the code promises, at a size the code bounds itself
+NESTED = "[" * (MAX_DEPTH + 1) + "]" * (MAX_DEPTH + 1)
+```
+
+The C recursion limit became stack-based in 3.14: `json.loads` refuses at 9,998 levels on 3.13.15 and parses 65,207 on
+3.15.2 (aarch64, measured). A test sized against the old limit stops exercising its branch. A limit the code relies on is
+the code's own bound, enforced before parsing; a comment that quotes an interpreter measurement names the version and the
+arch it was taken on.
+
+### Hand-built checks the stdlib now does
+
+UUID version bits set by hand where `uuid.UUID(int=n, version=8)` exists (3.14), base64 decoded then re-encoded to refuse
+a second spelling where `b64decode(…, canonical=True)` exists (3.15). The hand-built form is code to review and test;
+replace it in the version-bump follow-up, with a test that the output did not change (measured identical on 100,000
+values for the UUID case).
+
 ## Function-shape anti-patterns
 
 ### Too many arguments (F1)
@@ -388,6 +413,11 @@ Before finalizing code, verify:
 - [ ] All structured models are Pydantic (no `@dataclass`)
 - [ ] Error paths are tested
 - [ ] Edge cases are covered
+- [ ] No `object()` sentinel on a 3.15 floor (`sentinel("NAME")`)
+- [ ] No module-level constant `dict` on a 3.15 floor (`frozendict`)
+- [ ] No `from __future__ import annotations` added to a new module on a 3.14 floor
+- [ ] No `if TYPE_CHECKING:` name in a Pydantic field or a FastAPI route
+- [ ] No global lazy-import switch
 
 ## Top gotchas
 

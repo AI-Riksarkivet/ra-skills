@@ -2,11 +2,12 @@
 
 What's specific to FastAPI when instrumenting with OpenTelemetry. Everything else (SDK setup, exporters, sampling, semantic conventions, log forwarding, NATS context propagation) lives in the **`otel`** and **`python-infrastructure`** skills — don't duplicate.
 
-> If you only read one line: run `opentelemetry-instrument python -m your_app` after `opentelemetry-bootstrap -a install`. That auto-wires FastAPI, httpx, asyncpg, redis, SQLAlchemy and most of our stack. The rest of this file is for the bits auto-instrumentation can't cover.
+> **FastAPI ≥ 0.142 has NATIVE OpenTelemetry, on by default** [upstream: `SKILL.md` § OpenTelemetry; fastapi docs `advanced/opentelemetry.md`]: request spans, operation spans (dependencies, endpoint, serialization, `BackgroundTasks`), HTTP metrics, and OTel logs for unhandled exceptions and validation failures. It uses whatever global providers are configured and adds NO exporter unless `FASTAPI_OTEL_AUTO_CONFIGURE=true` (opt-in since 0.143.0).
 
 ## Contents
 
-- When auto-instrumentation is enough
+- Native or contrib — pick one per app
+- When contrib auto-instrumentation is enough
 - When to call `FastAPIInstrumentor.instrument_app` manually
 - Exclude noisy endpoints (`/livez`, `/readyz`, `/metrics`)
 - Request hooks — custom attributes from headers
@@ -14,11 +15,25 @@ What's specific to FastAPI when instrumenting with OpenTelemetry. Everything els
 - What NOT to do
 - Quick checklist for a new FastAPI service
 
-## When auto-instrumentation is enough
+## Native or contrib — pick one per app
 
-Almost always. The `opentelemetry-instrumentation-fastapi` package (installed by `opentelemetry-bootstrap`) hooks the ASGI lifecycle and emits one span per request, named `{METHOD} {http.route}` (so `GET /items/{item_id}` — the **template**, not the resolved path; that's what you want for cardinality).
+| Setup | What happens |
+| --- | --- |
+| `opentelemetry-instrument` / `FastAPIInstrumentor.instrument_app` (contrib) | FastAPI finds contrib's `OpenTelemetryMiddleware` in the built stack and turns its own tracing, logs and metrics OFF (`fastapi/telemetry/_asgi.py`, `_legacy_otel`, fastapi 0.165.0). No duplicates. |
+| Native only | Configure providers (SDK or `opentelemetry-distro`) before the app starts; tune with `FastAPI(telemetry={...})`; keys `tracing`, `metrics`, `logs`, `operation_spans`, `exclude` (a function of the ASGI scope), `auto_configure`. Disable contrib's FastAPI instrumentor (`OTEL_PYTHON_DISABLED_INSTRUMENTATIONS=fastapi`). |
+| starlette ≥ 1.7 `OpenTelemetryMiddleware` | Experimental ("may change in minor releases"). Do not stack it with either of the above. |
 
-You get for free:
+Upstream prefers native. This skill keeps contrib as an equal choice because one `opentelemetry-instrument` run also instruments httpx, the DB driver and redis; FastAPI then steps aside on its own.
+
+- Never set `FASTAPI_OTEL_AUTO_CONFIGURE=true` when the SDK (or `opentelemetry-instrument`) already exports to the same collector: two exporters, duplicate data [upstream: docs].
+- Native exception logs carry the exception message and stack trace; redact in a log processor or set `logs: False` if messages may hold secrets.
+- Exclude probes natively with `telemetry={"exclude": lambda scope: scope["path"] in {"/livez", "/readyz"}}`.
+
+## When contrib auto-instrumentation is enough
+
+Run `opentelemetry-instrument python -m your_app` after `opentelemetry-bootstrap -a install` when the process needs httpx, asyncpg, redis, SQLAlchemy and FastAPI instrumented at once. FastAPI then defers to it, as above.
+
+The contrib `opentelemetry-instrumentation-fastapi` package hooks the ASGI lifecycle and emits one span per request, named `{METHOD} {http.route}` (so `GET /items/{item_id}` — the **template**, not the resolved path; that's what you want for cardinality). You get for free:
 
 - One span per HTTP request with `http.method`, `http.route`, `http.status_code`, `network.peer.address`, `user_agent.original`, request/response sizes.
 - Async context propagation across `await` boundaries.
@@ -111,9 +126,10 @@ Span names should describe **what the code is doing**, not where it lives (`orde
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
 | `span.record_exception(e)` in route / handler                | Deprecated in OTel; events are second-class. See `otel` SKILL.md § Top gotchas. | Log the exception inside the active span context — `trace_id`/`span_id` ride along. |
 | Wrapping the whole route body in `tracer.start_as_current_span` | Duplicates the auto-created HTTP span — two layers of noise.                  | Wrap only the *business operation* inside the route.                              |
-| Custom `BackgroundTasks` traced as a child of the request    | Tasks run *after* the response — the request span is already closed.            | Don't use `BackgroundTasks` for anything you want to observe. Use NATS JetStream + propagate context (see `python-infrastructure`). |
+| Custom `BackgroundTasks` traced as a child of the request    | Tasks run *after* the response — the request span is already closed. (Native OTel records them as spans in the request's trace, but the task still dies with the worker.) | Don't use `BackgroundTasks` for anything you want to observe. Use NATS JetStream + propagate context (see `python-infrastructure`). |
 | Setting `service.name` on every span                         | Resource attribute, not span attribute. Wasteful and wrong.                     | Set via env: `OTEL_SERVICE_NAME=orders-api`.                                     |
 | `OTLPSpanExporter(endpoint="http://collector:4317")` in code | Hard-coded endpoints don't survive multi-env deploys.                           | `OTEL_EXPORTER_OTLP_ENDPOINT` env var.                                           |
+| `FASTAPI_OTEL_AUTO_CONFIGURE=true` beside an SDK that already exports | FastAPI adds a second exporter to the same providers — every span and metric twice. | Leave it unset; let one owner configure export. |
 | SDK-side sampling (`TraceIdRatioBased(0.1)`)                 | Drops traces before you know if the request errored.                            | Always-on at the SDK; tail sample in the Collector. See `otel` `references/collector.md`. |
 
 ## Quick checklist for a new FastAPI service

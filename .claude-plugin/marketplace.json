@@ -12,7 +12,7 @@
       "name": "writing-python",
       "source": "./skills/writing-python",
       "skills": "./",
-      "description": "Idiomatic Python 3.13+, Pydantic-first (not dataclasses), uv/ruff/ty toolchain. Use when writing, reviewing or testing Python code, or establishing a project's Python conventions. NOT for background jobs, retries, or observability (use `python-infrastructure`)."
+      "description": "Idiomatic Python 3.13–3.15, Pydantic-first (not dataclasses), uv/ruff/ty toolchain, with each newer feature gated on the project's requires-python. Use when writing, reviewing or testing Python code, moving a project to a newer Python, or establishing a project's Python conventions. NOT for background jobs, retries, or observability (use `python-infrastructure`)."
     },
     {
       "name": "writing-typescript",

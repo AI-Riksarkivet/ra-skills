@@ -10,10 +10,13 @@ Day-to-day FastAPI conventions for this project — the rules that apply to almo
 - Return type or `response_model`
 - Performance: no `ORJSONResponse` / `UJSONResponse`
 - Including routers — `prefix` / `tags` on the router, not `include_router()`
+- Request body limits — `max_body_size`, `form_limits`
+- Parameter models → [`parameter-models.md`](parameter-models.md)
 - Async vs sync path operations
 - Constrained query values via `StrEnum`
 - Do not use Pydantic `RootModel`
 - One HTTP operation per function
+- Removed and deprecated in recent FastAPI
 
 ## The `fastapi` CLI
 
@@ -185,6 +188,8 @@ The return type doesn't have to be a Pydantic model — a `list[int]`, `dict[str
 If the return type differs from what should be sent over the wire (filtering, sensitive fields), use `response_model=` on the decorator:
 
 ```python
+from typing import Any
+
 from fastapi import FastAPI
 from pydantic import BaseModel
 
@@ -197,9 +202,11 @@ class Item(BaseModel):
 
 
 @app.get("/items/me", response_model=Item)
-async def get_item() -> dict[str, object]:
+async def get_item() -> Any:
     return {"name": "Foo", "description": "A very nice Item"}
 ```
+
+Annotate `-> Any` (upstream's form) or the real internal type; never `-> Item` with `response_model=Item` — FAST001 refuses it, and the model is built twice. A route that returns a `Response` subclass skips validation entirely, so `response_model=` there is documentation only (fine for a probe that picks its own status).
 
 Particularly useful for filtering data to expose only public fields:
 
@@ -230,7 +237,7 @@ async def get_item() -> InternalItem:
 
 ## Performance: no `ORJSONResponse` / `UJSONResponse`
 
-Both are deprecated. Declare a return type or `response_model` instead — Pydantic v2 serializes in Rust, which is the only optimization that matters.
+Both are deprecated (fastapi 0.131.0). Declare a return type or `response_model` instead — Pydantic v2 serializes in Rust, which is the only optimization that matters.
 
 ## Including routers — `prefix` / `tags` on the router, not `include_router()`
 
@@ -268,16 +275,37 @@ app.include_router(router, prefix="/items", tags=["items"])
 
 Apply shared dependencies at the router level via `dependencies=[Depends(...)]`.
 
-## Async vs sync path operations
+## Request body limits
 
-Use `async def` only when the body is genuinely async-compatible (every blocking call is `await`ed or non-blocking). Otherwise use plain `def` — FastAPI runs sync functions in a threadpool so they don't block the event loop.
+[upstream: `SKILL.md` § Request Body Limits; fastapi 0.164.0 / 0.165.0, starlette ≥ 1.6.0]
+
+Set a total-body cap in bytes on the app, raise or lower it on a router (or in `include_router()`) or one route. The limit counts bytes as they are read — a chunked body with no `Content-Length` is caught too — and answers 413 if the response has not started.
 
 ```python
-from fastapi import FastAPI
+from typing import Annotated
 
-app = FastAPI()
+from fastapi import APIRouter, Body, FastAPI
+
+app = FastAPI(max_body_size=1024 * 1024)                       # every route: 1 MiB
+uploads = APIRouter(prefix="/uploads", max_body_size=100 * 1024 * 1024)
 
 
+@uploads.post("/small", max_body_size=10 * 1024 * 1024)
+async def small_upload(data: Annotated[bytes, Body(media_type="application/octet-stream")]) -> Receipt: ...
+```
+
+- `None` inherits; `0` allows only an empty body; unset everywhere means **unlimited**. Always set the app default.
+- Middleware that reads the body before routing is held to the APP limit, whatever the route allows.
+- `form_limits={"max_fields": …, "max_files": …, "max_part_size": …}` bounds form parsing (defaults 1,000 / 1,000 / 1 MiB per text field); exceeding one is 400. Each key inherits on its own.
+- The total cap is separate from per-file checks and the spool threshold: `max_body_size` bounds the request, `form_limits` the parser.
+
+Why per route: a JSON body is buffered and then parsed with `json.loads` ON THE EVENT LOOP (measured 117 ms for a 65 MiB body, on top of the buffer). A cap sized for the one upload route lets every JSON route take that body. Before fastapi 0.164 the same rule is a pure-ASGI middleware that counts `http.request` bytes and matches routes by path.
+
+## Async vs sync path operations
+
+Use `async def` only when the body is genuinely async-compatible (every blocking call is `await`ed or non-blocking). Otherwise use plain `def` — FastAPI runs sync functions in a threadpool so they don't block the event loop. "In case of doubt, or by default, use regular `def`" [upstream: `SKILL.md`].
+
+```python
 # async def when calling async code
 @app.get("/async-items/")
 async def read_async_items():
@@ -292,7 +320,9 @@ def read_items():
     return data
 ```
 
-Same rule applies to dependencies. **Never run blocking code inside an `async def`** — it works but kills throughput. For mixing blocking and async, see the Asyncer pattern in [`production-patterns.md`](production-patterns.md) § Bridging sync ↔ async.
+Same rule applies to dependencies. **Never run blocking code inside an `async def`** — it works but kills throughput. That includes a helper that reads a file: a sync `load_model()` doing `json.loads(path.read_text())` per call, called per item in an `async` route, measured 177 ms on the loop for 1,000 items. Cache what never changes (`@functools.cache`) or move it to the thread.
+
+A project may instead write `async def` routes and hand every blocking call to `run_in_threadpool`/`asyncify` explicitly — the rule is met as long as no blocking call is left on the loop. ruff's `ASYNC` rules guard the direct calls; nothing guards a helper, so review for it. For mixing blocking and async, see [`production-patterns.md`](production-patterns.md) § Bridging sync ↔ async.
 
 ## Constrained query values via `StrEnum`
 
@@ -392,3 +422,16 @@ async def handle_items(request: Request):
 ```
 
 Multiplexed handlers produce confusing OpenAPI output, mix request bodies into a single signature, and turn the body into an `if request.method` ladder.
+
+## Removed and deprecated in recent FastAPI
+
+| Gone / deprecated | Since | Use |
+| --- | --- | --- |
+| Unknown keywords on `Path`/`Query`/`Header`/`Cookie`/`Body`/`Form`/`File` (`Query(custom="x")`) | 0.155.0 — now `TypeError` | `Query(json_schema_extra={"custom": "x"})` |
+| `FastAPI(openapi_prefix=...)`, `FastAPI(**extra)` | 0.145.0 — removed | `root_path` at the server |
+| `FastAPI(root_path=...)` | 0.146.0 — deprecated | `uvicorn --root-path` / `fastapi run --root-path` |
+| `regex=` | 0.100.0 — deprecated | `pattern=` |
+| `@app.on_event(...)` | 0.93.0 — superseded by lifespan, deprecated | lifespan ([`production-patterns.md`](production-patterns.md)) |
+| `ORJSONResponse` / `UJSONResponse` | 0.131.0 — deprecated | a return type or `response_model` |
+
+Behaviour that changed under existing code (fastapi 0.148–0.162): defaults of omitted `Query`/`Header`/`Cookie`/`Form` values are no longer validated unless `validate_default=True` (0.148); an explicit JSON `null` is validated as `None` — a non-nullable field rejects it even when it has a default, which now applies only to an omitted value (0.151); a parameter model's `extra` now applies to sibling fields in the same location (0.160); an omitted `bool` form field uses its declared default or is a missing-field error, no longer `False` (0.162).

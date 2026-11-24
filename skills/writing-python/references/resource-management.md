@@ -18,6 +18,7 @@ Release resources deterministically with context managers. Connections, file han
 
 ```python
 from types import TracebackType
+from typing import Self
 
 class DatabaseConnection:
     """Database connection with automatic cleanup."""
@@ -34,7 +35,7 @@ class DatabaseConnection:
             self._conn.close()
             self._conn = None
 
-    def __enter__(self) -> "DatabaseConnection":
+    def __enter__(self) -> Self:
         self.connect()
         return self
 
@@ -61,7 +62,7 @@ class AsyncDatabasePool:
         self._max_size = max_size
         self._pool: asyncpg.Pool | None = None
 
-    async def __aenter__(self) -> "AsyncDatabasePool":
+    async def __aenter__(self) -> Self:
         self._pool = await asyncpg.create_pool(
             self._dsn, min_size=self._min_size, max_size=self._max_size,
         )
@@ -136,7 +137,7 @@ class StreamWriter:
     def __init__(self, stream) -> None:
         self._stream = stream
 
-    def __enter__(self) -> "StreamWriter":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(
