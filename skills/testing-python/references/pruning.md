@@ -15,7 +15,7 @@ its own lines as production.
 S=$(mktemp -d)
 T="<package>/tests <the integration tests that drive it>"        # the scope
 F="<the default lane's marker filter>"                           # e.g. "not slow"
-COVERAGE_FILE=$S/.coverage uv run pytest $T -m "$F" -n <N> -q --cov --cov-context=test --cov-report=
+COVERAGE_CORE=pytrace COVERAGE_FILE=$S/.coverage uv run pytest $T -m "$F" -n <N> -q --cov --cov-context=test --cov-report=
 COVERAGE_FILE=$S/.coverage uv run coverage json --show-contexts -o $S/cov.json -q
 uv run pytest $T -m "$F" --collect-only -q | grep '::' > $S/ids.txt
 ```
@@ -24,6 +24,11 @@ Each context is `<test id>|setup`, `|run` or `|teardown`. Count **`|run` only**.
 up lazy imports and interpreter-exit work, and they make a source-reading test look as if it ran
 production code. Per-test contexts combine correctly under xdist (measured: the same line set and the
 same findings at `-n 4` as in one process).
+
+On Python 3.14+ coverage's default core is `sys.monitoring`, which records fewer per-test contexts: one codebase
+measured a union of 22,445 lines under it and 22,706 under `COVERAGE_CORE=pytrace`, on the same code (coverage
+7.15.2, CPython 3.15.2). Pin `COVERAGE_CORE=pytrace` for every run whose contexts are compared; the C tracer has no
+3.15 build there (`coverage debug sys`: `CTracer: unavailable`, and `ctrace` falls back to the Python tracer).
 
 ## 2. Tests that execute no production line
 
@@ -108,6 +113,10 @@ still asserts something the broader test does not. Read both tests' asserts befo
 
   The kept tests are a subset of the original ones, so their union is a subset of the original union,
   and an equal count means an equal set.
+  When the code changed too (a refactor beside the prune), a count also moves for reasons that lose nothing: a file's
+  lines shift when it grows or shrinks, and a line run once per process (a cached app, a first-use initialiser) goes to
+  whichever test xdist runs first (measured: 2 to 6 lines between runs of unchanged tests). Explain a shrink by listing
+  the lines lost and gained per file before calling it that.
 - **For each branch whose test you merged or deleted**, run the red check (`../SKILL.md` § The red
   check) against the kept test: break that branch, and the kept test must go red.
 - **Record the proof in the commit message**: the scope measured, the tests deleted and merged, and the

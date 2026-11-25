@@ -42,6 +42,11 @@ a fallback path production never takes.
 
 - **Default: `with TestClient(app) as client`** in a sync test. It runs startup and shutdown and needs
   no async plumbing.
+- **Starlette 1.10 runs `TestClient` on `httpx2`** (`pydantic/httpx2`) and, given only `httpx`, warns
+  `StarletteDeprecationWarning`: put `httpx2` in the dev dependencies. Starlette imports it for the type checker
+  unconditionally, so without it every `TestClient` checks as untyped. With it a `TestClient` answers `httpx2.Response`
+  and types `client.app` as any ASGI callable: reach the FastAPI app through one typed helper,
+  `cast("FastAPI", client.app)` (measured, starlette 1.10.0, ty 0.0.86: one suite carried 201 such errors unseen).
 - **When the test itself must be async** (it awaits something besides the client), use
   `httpx.AsyncClient` over `ASGITransport` inside `asgi_lifespan.LifespanManager`, and pass
   `manager.app` to the transport. `manager.app` carries the lifespan state.

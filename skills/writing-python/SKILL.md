@@ -95,15 +95,24 @@ equal.
 | Floor | Use | Instead of |
 | --- | --- | --- |
 | 3.14 | unquoted forward references, no `from __future__ import annotations` in new modules (PEP 649/749) | quotes, the `__future__` import |
-| 3.14 | `uuid.uuid7()` for time-ordered ids; `uuid.UUID(int=n, version=8)` | hand-set version and variant bits |
-| 3.14 | t-strings (`t"..."`, PEP 750) for any string a value is escaped into (SQL, filters, HTML, shell) | f-string + a quoting helper the caller can forget |
+| 3.14 | `uuid.uuid7()` for an id listed or sorted by creation time; `uuid.UUID(int=n, version=8)` | hand-set version and variant bits |
+| 3.14 | t-strings (`t"..."`, PEP 750) for any string a value is escaped into (SQL, filters, HTML, shell), rendered by one function (`references/patterns.md` § Values escaped into a string) | f-string + a quoting helper the caller can forget |
 | 3.14 | `except A, B:` — let `ruff format` write it (it removes the parentheses at a py314+ target, measured) | hand-picking a form |
 | 3.15 | `sentinel("NAME")` for a "not passed" default (PEP 661) | `object()` |
 | 3.15 | `frozendict` for constant lookup tables (PEP 814) | a module-level `dict` that `Final` does not freeze |
 | 3.15 | `[*xs for xs in rows]`, `{**d for d in ds}` (PEP 798) | `chain.from_iterable`, `reduce(operator.iadd, …)`, `sum(lists, [])` |
-| 3.15 | `base64.b64decode(…, validate=True, canonical=True)` when a second spelling of the same bytes must be refused | decode, re-encode and compare |
+| 3.15 | `base64.b64decode(…, validate=True, canonical=True)` (and `b32decode(…, canonical=True)`) when a second spelling of the same bytes must be refused | decode, re-encode and compare |
 | 3.15 | `bytearray.take_bytes()` to hand a built buffer out | `bytes(buf)` (a copy) |
 | 3.15 | `lazy import` / `lazy from` only for CLI start-up time, never globally (see Top gotchas) | — |
+
+Three rows carry a caveat (measured on CPython 3.15.2):
+
+- `uuid7` is a 48-bit millisecond timestamp, a 42-bit counter that steps by one within a millisecond and 32 random
+  bits, so consecutive ids are nearly predictable: an id that must be unguessable (a token, a claim, a fence) or must
+  not tell when it was made stays `uuid4`.
+- `canonical=` exists on `b64decode`, `b32decode`, `b32hexdecode`, `b85decode`, `a85decode` and `z85decode`, not on
+  `urlsafe_b64decode` or `b16decode`: read url-safe text with `b64decode(s, altchars=b"-_", padded=False, canonical=True)`.
+- `take_bytes()` empties the buffer, so read `len(buf)` before it.
 
 Not house defaults on any version: the free-threaded build, the JIT, `concurrent.interpreters` (3.14 says many extension
 modules are not yet compatible), `TypedDict(closed=True)` / `TypeForm` (data is a Pydantic model here).
@@ -111,7 +120,8 @@ modules are not yet compatible), `TypedDict(closed=True)` / `TypeForm` (data is 
 Moving a project up a version is three changes in one commit: `requires-python` in every `pyproject.toml`,
 `.python-version`, and the base images; then `uv lock`. Before it, check every binary dependency has a `cp3XX` or `abi3`
 wheel for each target arch in the locked version, not only in the latest (measured 2026-11-24 for 3.15: pyarrow 25,
-pydantic-core 2.46, numpy 2.4 had none; ray had none in any release).
+pydantic-core 2.46, numpy 2.4 had none; ray had none in any release). A floor of 3.14 or later is also when one codemod
+deletes `from __future__ import annotations` (`references/type-safety.md` § Annotations are evaluated lazily).
 
 ## Cross-skill boundaries
 
@@ -128,6 +138,7 @@ pydantic-core 2.46, numpy 2.4 had none; ray had none in any release).
   'dataset'`). An explicit `lazy import` is per statement and only at module scope; a lazy import of anything Pydantic or
   FastAPI reads in an annotation is loaded at once anyway (measured).
 - **`sentinel` and `frozendict` are builtins from 3.15.** A local named `sentinel` now shadows one (ruff A001/A002).
-- **Interpreter limits are not constants.** From 3.14 the C recursion limit is stack-based: `json.loads` of nested lists
-  fails at 9,998 levels on 3.13.15 and at 65,207 on 3.15.2 (aarch64, measured), and `str()` of the same value at 9,999 and
-  47,425. Code that relies on a parser refusing deep input must bound the depth itself.
+- **Interpreter limits are not constants.** From 3.14 the C recursion limit is stack-based. Measured at the top level on
+  aarch64, `json.loads` of nested lists holds 9,998 levels on CPython 3.13.15 and 65,210 on 3.15.2, and `str()` of the
+  same value 9,999 and 26,086, each failing one level deeper; an asyncio task or a thread holds a few levels fewer. Code
+  that relies on a parser refusing deep input bounds the depth itself.

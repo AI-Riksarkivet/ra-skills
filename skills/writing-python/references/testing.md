@@ -338,8 +338,8 @@ A FastAPI app under test also needs its lifespan run. See `fastapi` → `referen
   Why: `skipif(tool missing)` is green everywhere the tool is absent, including the lane that should
   run it.
 - **Size an input against the code's own bound, never against the interpreter's.** A recursion depth, an int-string
-  digit limit or a stack size moves between Python versions (`json.loads` refuses 9,998 nested lists on 3.13.15 and
-  parses 65,207 on 3.15.2, measured), and a test sized against one stops reaching its branch on the next version without
+  digit limit or a stack size moves between Python versions (`json.loads` holds about 10,000 nested lists on 3.13 and
+  65,000 on 3.15: `SKILL.md` § Top gotchas), and a test sized against one stops reaching its branch on the next version without
   failing. `anti-patterns.md` § Version-move anti-patterns.
   Why: such a test goes green for the wrong reason, which is worse than red.
 

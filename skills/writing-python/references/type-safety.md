@@ -45,7 +45,9 @@ From 3.14 an annotation is evaluated when something reads it, not when the `def`
 project whose floor is 3.14:
 
 - **Write forward references unquoted, and no `from __future__ import annotations` in a new module.** The import is
-  deprecated (removal not before 3.13's end of life in 2029); existing modules keep it until one codemod removes it.
+  deprecated (removal not before 3.13's end of life in 2029); existing modules keep it until one codemod removes it, run
+  once the floor reaches 3.14 (measured on a 968-module codebase on 3.15.2: the suite and the generated OpenAPI
+  unchanged), after checking the two rules below.
 - **A name Pydantic or FastAPI reads must exist at runtime when they read it.** Pydantic resolves a field's forward
   reference on first use; FastAPI resolves a route's parameter and return types at decoration. Measured on 3.15.2 with
   FastAPI 0.165: a route whose body model is defined after the route reads the body as a query parameter (422) and

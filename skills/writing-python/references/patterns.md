@@ -11,6 +11,7 @@ Topics with their own reference are not repeated here: Pydantic model basics →
 - Pathlib
 - Functools toolkit
 - Constant lookup tables
+- Values escaped into a string
 - Logging
 
 ## Project structure
@@ -78,7 +79,9 @@ raises `RuntimeError` with no running loop since 3.14 (measured on 3.15.2), and 
 `asyncio.run(main(), loop_factory=...)`, test a coroutine function with `inspect.iscoroutinefunction`.
 
 To see what a hung async process is doing: `python -m asyncio pstree <pid>` (3.14+), or
-`python -m profiling.sampling attach --async-aware <pid>` (3.15+, needs ptrace rights).
+`python -m profiling.sampling attach --async-aware <pid>` (3.15+). Both read the other process's memory, so both need
+ptrace rights: in a container without `CAP_SYS_PTRACE` under Yama `ptrace_scope` 1 each refuses with "insufficient
+permissions" (measured, 3.15.2), and `<pid>` is the interpreter's, not PID 1 when an init such as tini starts it.
 
 ## Pathlib
 
@@ -193,7 +196,10 @@ which is quadratic (ruff `RUF017` rewrites it; measured on 0.17.6 it now writes 
 merged = [*chunk for chunk in chunks]          # 3.15+
 merged = [x for chunk in chunks for x in chunk]  # before 3.15
 union = {*s for s in sets}                     # 3.15+, instead of reduce(operator.or_, sets, set())
+pages = (*rows(p) for p in iterator)          # 3.15+, lazy like the two-`for` generator it replaces
 ```
+
+`(first, *iterator)` drains the iterator before anything is yielded; keep the generator form where the source streams.
 
 Use `reduce` only for an associative operation with no shortcut, such as composing functions.
 
@@ -217,9 +223,48 @@ STATUS_FOR: Final[dict[str, int]] = {"not_found": 404, "conflict": 409}
 STATUS_FOR: Final = frozendict(not_found=404, conflict=409)
 ```
 
-`frozendict` is not a `dict` subclass: `isinstance(t, dict)` is False. Don't hand one to a library that checks for
-`dict` (an OpenAPI fragment, a FastAPI `responses=`); check `collections.abc.Mapping` in your own code. json, pickle and
-copy handle it, and Pydantic 2.14 accepts and keeps it in a `frozendict[str, int]` field (measured).
+`frozendict` is not a `dict` subclass (`isinstance(t, dict)` is False), and it freezes one level: freeze each level of a
+nested table. Check `collections.abc.Mapping` in your own code. Measured on 3.15.2 (FastAPI 0.165, Pydantic 2.14, ty
+0.0.86): FastAPI's `responses=` refuses one (`AssertionError: An additional response must be a dict`), and ty refuses one
+for a parameter typed `dict` or a `TypedDict` (`openapi_extra=`, `telemetry=`); a frozendict placed inside the document
+`app.openapi()` builds serialises unchanged, and json, pickle, copy, pyarrow field metadata and a Pydantic field take it.
+
+## Values escaped into a string
+
+On a 3.14 floor a string a value is escaped into (a SQL or Lance filter, HTML, a shell argument) is a template, rendered
+by one function that spells every interpolation by its type, so no call site can leave a value unquoted (PEP 750):
+
+```python
+from string.templatelib import Interpolation, Template
+
+
+def sql_filter(template: Template) -> str:
+    return "".join(part if isinstance(part, str) else _literal(part) for part in template)
+
+
+def _literal(part: Interpolation) -> str:
+    if part.conversion is not None or part.format_spec:
+        raise ValueError(f"a value takes no conversion or format spec: {{{part.expression}}}")
+    match part.value:
+        case bool():
+            raise TypeError("a bool would read as True")
+        case str() as text:
+            return "'" + text.replace("'", "''") + "'"
+        case int() as number:
+            return str(number)
+        case other:
+            raise TypeError(f"not a filter value: {type(other).__name__}")
+
+
+where = sql_filter(t"run_id = {run_id}")
+```
+
+- A column, a function or a type is template text: an interpolation is a value and comes out quoted. For a column held in
+  a variable, build the template: `Template(f"{column} IN (", Interpolation(values, "values"), ")")`.
+- A template joins only with a template (`t"a" + "b"` is a `TypeError`, measured), so a filter built in pieces stays a
+  template until it is rendered once.
+- The quoting rule is the target's: a Lance filter doubles a quote and reads a backslash as itself (measured on pylance
+  14.0.3: a value ending in `\` or spelling `x' OR '1'='1` matches only itself).
 
 ## Logging
 

@@ -206,7 +206,7 @@ async def get_item() -> Any:
     return {"name": "Foo", "description": "A very nice Item"}
 ```
 
-Annotate `-> Any` (upstream's form) or the real internal type; never `-> Item` with `response_model=Item` — FAST001 refuses it, and the model is built twice. A route that returns a `Response` subclass skips validation entirely, so `response_model=` there is documentation only (fine for a probe that picks its own status).
+Annotate `-> Any` (upstream's form) or the real internal type; never `-> Item` with `response_model=Item` — the model is built twice. FAST001 refuses it below a 3.14 target only (`SKILL.md` § Tooling & libraries), so on a 3.14+ floor catch it in review. A route that returns a `Response` subclass skips validation entirely, so `response_model=` there is documentation only (fine for a probe that picks its own status).
 
 Particularly useful for filtering data to expose only public fields:
 
